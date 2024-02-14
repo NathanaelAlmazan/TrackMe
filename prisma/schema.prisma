@@ -1,0 +1,157 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Offices {
+  id          BigInt        @id @default(autoincrement())
+  name        String        @db.VarChar(100)
+  officers    Officers[]
+  referrals   Referrals[]
+  reports     SubmittedReports[]
+}
+
+enum Role {
+  OFFICER
+  CHIEF
+  DIRECTOR
+  SUPERUSER
+  HR_ADMIN
+}
+
+model Positions {
+  id          BigInt        @id @default(autoincrement())
+  label       String        @db.VarChar(50)
+  role        Role
+  officers    Officers[]
+}
+
+model Officers {
+  uuid        String        @id @db.Uuid @default(uuid())
+  firstName   String        @db.VarChar(50)
+  lastName    String        @db.VarChar(50)
+  positionId  BigInt?
+  officeId    BigInt?
+  password    String        @db.Text
+  signature   String?       @db.Text
+  active      Boolean       @default(false)
+  device      String?       @db.Text
+  avatar      String        @db.Text @default("/assets/images/avatars/avatar_30.jpg")
+  position    Positions?    @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  office      Offices?      @relation(fields: [officeId], references: [id], onDelete: SetNull)
+  trails      AuditTrail[]
+  comments    Comments[]
+}
+
+enum Status {
+  NOT_STARTED
+  ONGOING
+  FINISHED
+  NOT_ACTIONABLE
+}
+
+model DocumentStatus {
+  id          BigInt        @id @default(autoincrement())
+  label       String        @db.VarChar(50)
+  category    Status
+  documents   Documents[]
+}
+
+model DocumentTypes {
+  id            BigInt      @id @default(autoincrement())
+  label         String      @db.VarChar(100)
+  documents     Documents[]
+}
+
+model DocumentPurpose {
+  id            BigInt      @id @default(autoincrement())
+  label         String      @db.VarChar(100)
+  documents     Documents[]
+}
+
+model Documents {
+  referenceNum      String             @id @db.VarChar(50)
+  subject           String             @db.Text
+  description       String             @db.Text
+  receivedFrom      String             @db.VarChar(100)
+  typeId            BigInt?
+  purposeId         BigInt?
+  statusId          BigInt?      
+  dateCreated       DateTime           @db.Timestamp(3) @default(now())
+  dateDue           DateTime
+  tag               String?            @db.VarChar(20)
+  type              DocumentTypes?     @relation(fields: [typeId], references: [id], onDelete: SetNull)
+  purpose           DocumentPurpose?   @relation(fields: [purposeId], references: [id], onDelete: SetNull)
+  status            DocumentStatus?    @relation(fields: [statusId], references: [id], onDelete: SetNull)
+  referrals         Referrals[]
+  comments          Comments[]
+  trails            AuditTrail[]
+}
+
+model Referrals {
+  documentId        String             @db.VarChar(50)
+  officeId          BigInt
+  document          Documents          @relation(fields: [documentId], references: [referenceNum], onDelete: Cascade)
+  office            Offices            @relation(fields: [officeId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, officeId])
+}
+
+model AuditTrail {
+  id            BigInt      @id @default(autoincrement())     
+  action        String      @db.VarChar(100)
+  officerId     String      @db.Uuid
+  documentId    String      @db.VarChar(50)
+  dateCreated   DateTime    @db.Timestamp(3) @default(now())
+  officer       Officers    @relation(fields: [officerId], references: [uuid], onDelete: Cascade)
+  document      Documents   @relation(fields: [documentId], references: [referenceNum], onDelete: Cascade)
+}
+
+model Comments {
+  id            BigInt      @id @default(autoincrement())   
+  message       String      @db.Text
+  files         String      @db.Text
+  documentId    String      @db.VarChar(50)
+  senderId      String      @db.Uuid
+  dateCreated   DateTime    @db.Timestamp(3) @default(now())
+  document      Documents   @relation(fields: [documentId], references: [referenceNum], onDelete: Cascade)
+  sender        Officers    @relation(fields: [senderId], references: [uuid], onDelete: Cascade)
+}
+
+enum Frequency {
+  NONE
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+model Reports {
+  id            BigInt      @id @default(autoincrement())   
+  name          String      @db.Text
+  basis         String      @db.Text
+  localDue      DateTime  
+  nationalDue   DateTime
+  frequency     Frequency
+  submitted     SubmittedReports[]
+}
+
+model SubmittedReports {
+  id            BigInt      @id @default(autoincrement())
+  reportId      BigInt
+  officeId      BigInt
+  dateCreated   DateTime    @db.Timestamp(3) @default(now())
+  localDue      DateTime
+  nationalDue   DateTime
+  message       String?     @db.Text
+  files         String?     @db.Text
+  status        Status
+  report        Reports     @relation(fields: [reportId], references: [id], onDelete: Cascade)    
+  office        Offices     @relation(fields: [officeId], references: [id], onDelete: Cascade)
+}
