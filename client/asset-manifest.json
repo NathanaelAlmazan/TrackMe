@@ -1,7 +1,7 @@
 {
   "files": {
     "main.css": "https://rr6manila.com/static/css/main.b2127959.css",
-    "main.js": "https://rr6manila.com/static/js/main.fbe688ca.js",
+    "main.js": "https://rr6manila.com/static/js/main.565539a0.js",
     "static/js/916.73905951.chunk.js": "https://rr6manila.com/static/js/916.73905951.chunk.js",
     "static/js/92.a58eb199.chunk.js": "https://rr6manila.com/static/js/92.a58eb199.chunk.js",
     "static/js/168.a57644fe.chunk.js": "https://rr6manila.com/static/js/168.a57644fe.chunk.js",
@@ -25,7 +25,7 @@
     "service-worker.js": "https://rr6manila.com/service-worker.js",
     "index.html": "https://rr6manila.com/index.html",
     "main.b2127959.css.map": "https://rr6manila.com/static/css/main.b2127959.css.map",
-    "main.fbe688ca.js.map": "https://rr6manila.com/static/js/main.fbe688ca.js.map",
+    "main.565539a0.js.map": "https://rr6manila.com/static/js/main.565539a0.js.map",
     "916.73905951.chunk.js.map": "https://rr6manila.com/static/js/916.73905951.chunk.js.map",
     "92.a58eb199.chunk.js.map": "https://rr6manila.com/static/js/92.a58eb199.chunk.js.map",
     "168.a57644fe.chunk.js.map": "https://rr6manila.com/static/js/168.a57644fe.chunk.js.map",
@@ -49,6 +49,6 @@
   },
   "entrypoints": [
     "static/css/main.b2127959.css",
-    "static/js/main.fbe688ca.js"
+    "static/js/main.565539a0.js"
   ]
 }
