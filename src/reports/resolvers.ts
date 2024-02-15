@@ -135,7 +135,8 @@ const resolvers = {
                             }
                         }
                     ],
-                    status: Status.ONGOING
+                    status: Status.ONGOING,
+                    officeId: args.officeId
                 },
                 _count: {
                     _all: true

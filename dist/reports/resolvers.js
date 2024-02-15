@@ -132,7 +132,8 @@ const resolvers = {
                             }
                         }
                     ],
-                    status: client_1.Status.ONGOING
+                    status: client_1.Status.ONGOING,
+                    officeId: args.officeId
                 },
                 _count: {
                     _all: true
