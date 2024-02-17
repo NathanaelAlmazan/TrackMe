@@ -4,8 +4,6 @@ import pubsub from "../pubsub";
 
 export function nextDate(date: Date, frequency: Frequency) {
     switch (frequency) {
-        case Frequency.WEEKLY:
-            return new Date(date.setDate(date.getDate() + 7));
         case Frequency.MONTHLY:
             return new Date(date.setMonth(date.getMonth() + 1));
         case Frequency.YEARLY:

@@ -3,6 +3,8 @@ import { GraphQLError } from "graphql";
 import dataClient from "../data-client";
 import pubsub from "../pubsub";
 
+type CalendarReports = Reports & SubmittedReports;
+
 interface CalendarEvents extends Events {
     dateDue?: string;
     type?: "EVENT" | "REPORT" | "DOCUMENT";
@@ -19,9 +21,9 @@ const resolvers = {
         },
 
         dateDue: (parent: CalendarEvents) => {
-            if (!parent.dateDue || parent.dateDue === 'NONE') return null;
+            if (!parent.dateDue) return null;
             return new Date(parent.dateDue).toISOString();
-        }
+        },
     },
 
     Reports: {
@@ -35,34 +37,6 @@ const resolvers = {
 
         nationalDue: (parent: Reports) => {
             return new Date(parent.nationalDue).toISOString();
-        },
-
-        submissions: async (parent: Reports, args: { date: string, take?: number }) => {
-            const date = new Date(args.date);
-
-            return await dataClient.submittedReports.findMany({
-                where: {
-                    reportId: parent.id,
-                    OR: [
-                        {
-                            localDue: {
-                                lte: new Date(date.getFullYear(), date.getMonth(), date.getDate() + 2, 0),
-                                gte: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0)
-                            }
-                        },
-                        {
-                            nationalDue: {
-                                lte: new Date(date.getFullYear(), date.getMonth(), date.getDate() + 2, 0),
-                                gte: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0)
-                            }
-                        }
-                    ]
-                },
-                orderBy: {
-                    localDue: 'desc'
-                },
-                take: args.take
-            })
         }
     },
 
@@ -127,12 +101,27 @@ const resolvers = {
             })
         },
 
-        getReportById: async (_: unknown, args: Reports) => {
-            return await dataClient.reports.findUnique({
+        getReportById: async (_: unknown, args: SubmittedReports) => {
+            const submitted = await dataClient.submittedReports.findUnique({
                 where: {
                     id: args.id
+                },
+                include: {
+                    report: true
                 }
             })
+
+            if (!submitted) throw new GraphQLError('Report does not exist', {
+                extensions: {
+                  code: 'BAD_USER_INPUT',
+                },
+            });
+
+            return {
+                ...submitted.report,
+                localDue: submitted.localDue,
+                nationalDue: submitted.nationalDue
+            };
         },
 
         getSubmittedReports: async (_: unknown, args: { officeId?: number }) => {
@@ -246,63 +235,50 @@ const resolvers = {
             // get events
             const events: Events[] = await dataClient.$queryRaw`SELECT *
                             FROM public."Events"
-                            WHERE
-                                (
-                                    CASE 
-                                        WHEN EXTRACT(MONTH FROM date) BETWEEN 1 AND 3 THEN 'Q1'
-                                        WHEN EXTRACT(MONTH FROM date) BETWEEN 4 AND 6 THEN 'Q2'
-                                        WHEN EXTRACT(MONTH FROM date) BETWEEN 7 AND 9 THEN 'Q3'
-                                        ELSE 'Q4'
-                                    END =
-                                    CASE 
-                                        WHEN EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD')) BETWEEN 1 AND 3 THEN 'Q1'
-                                        WHEN EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD')) BETWEEN 4 AND 6 THEN 'Q2'
-                                        WHEN EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD')) BETWEEN 7 AND 9 THEN 'Q3'
-                                        ELSE 'Q4'
-                                    END
-                                    AND "frequency" = 'QUARTERLY'
-                                ) OR (
+                            WHERE (
                                     EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
                                     AND "frequency" = 'YEARLY'
                                 ) OR (
                                     EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
                                     AND EXTRACT(YEAR FROM date) = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD'))
                                     AND "frequency" = 'NONE'
-                                ) OR "frequency" IN ('WEEKLY', 'MONTHLY')`;
+                                ) OR "frequency" = 'MONTHLY'`;
 
             // get reports
             const reports: Reports[] = await dataClient.$queryRaw`SELECT *
-                                FROM public."Reports"
-                                WHERE
-                                    (
-                                        CASE 
-                                            WHEN EXTRACT(MONTH FROM "localDue") BETWEEN 1 AND 3 THEN 'Q1'
-                                            WHEN EXTRACT(MONTH FROM "localDue") BETWEEN 4 AND 6 THEN 'Q2'
-                                            WHEN EXTRACT(MONTH FROM "localDue") BETWEEN 7 AND 9 THEN 'Q3'
-                                            ELSE 'Q4'
-                                        END =
-                                        CASE 
-                                            WHEN EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD')) BETWEEN 1 AND 3 THEN 'Q1'
-                                            WHEN EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD')) BETWEEN 4 AND 6 THEN 'Q2'
-                                            WHEN EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD')) BETWEEN 7 AND 9 THEN 'Q3'
-                                            ELSE 'Q4'
-                                        END
-                                        AND "frequency" = 'QUARTERLY'
-                                    ) OR (
-                                        EXTRACT(MONTH FROM "localDue") = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
-                                        AND "frequency" = 'YEARLY'
-                                    ) OR (
-                                        EXTRACT(MONTH FROM "localDue") = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
-                                        AND EXTRACT(YEAR FROM "localDue") = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD'))
-                                        AND "frequency" = 'NONE'
-                                    ) OR "frequency" IN ('WEEKLY', 'MONTHLY')`;
+                            FROM public."Reports"
+                            WHERE (
+                                    EXTRACT(MONTH FROM "localDue") = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                                    AND "frequency" = 'YEARLY'
+                                ) OR (
+                                    EXTRACT(MONTH FROM "localDue") = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                                    AND EXTRACT(YEAR FROM "localDue") = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                                    AND "frequency" = 'NONE'
+                                ) OR "frequency" = 'MONTHLY'`;
 
             const documents: Documents[] = await dataClient.$queryRaw`SELECT *
-                                    FROM public."Documents" doc
-                                    INNER JOIN public."DocumentStatus" status ON status.id = doc."statusId"
-                                    WHERE status.category != 'NOT_ACTIONABLE'
-                                    AND EXTRACT(MONTH FROM "dateDue") = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
-                                    AND EXTRACT(YEAR FROM "dateDue") = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD'))`;
+                                FROM public."Documents" doc
+                                INNER JOIN public."DocumentStatus" status ON status.id = doc."statusId"
+                                WHERE status.category != 'NOT_ACTIONABLE'
+                                AND EXTRACT(MONTH FROM "dateDue") = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                                AND EXTRACT(YEAR FROM "dateDue") = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD'))`;
+
+            // get submissions
+            const submissions: CalendarReports[] = await dataClient.$queryRaw`SELECT DISTINCT ON (sub."reportId", sub."localDue", sub."nationalDue") 
+                                sub."id" AS "id",
+                                sub."reportId",
+                                sub."localDue",
+                                sub."nationalDue",
+                                rep."name",
+                                rep."basis"
+                                FROM public."SubmittedReports" sub
+                                INNER JOIN public."Reports" rep ON rep.id = sub."reportId"
+                                WHERE (
+                                        EXTRACT(MONTH FROM sub."localDue") = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                                        AND EXTRACT(YEAR FROM sub."localDue") = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                                    ) OR (
+                                        EXTRACT(MONTH FROM sub."nationalDue") = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                                        AND EXTRACT(YEAR FROM sub."nationalDue") = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD')))`;
 
             // filter documents by ref number
             let assigned: string[] = [];
@@ -329,11 +305,11 @@ const resolvers = {
                 subject: event.subject,
                 description: event.description,
                 date: new Date(event.date).toISOString(),
-                dateDue: 'NONE',
+                dateDue: '',
                 frequency: event.frequency,
                 type: "EVENT"
-            })).concat(reports.map(report => ({
-                id: report.id.toString(),
+            })).concat(reports.filter(report => !submissions.find(sub => sub.reportId === report.id)).map(report => ({
+                id: '',
                 subject: report.name,
                 description: report.basis,
                 date: new Date(report.localDue).toISOString(),
@@ -345,9 +321,17 @@ const resolvers = {
                 subject: document.referenceNum,
                 description: document.subject,
                 date: new Date(document.dateDue).toISOString(),
-                dateDue: 'NONE',
+                dateDue: '',
                 frequency: "NONE",
                 type: "DOCUMENT"
+            }))).concat(submissions.map(submit => ({
+                id: submit.id.toString(),
+                subject: submit.name,
+                description: submit.basis,
+                date: new Date(submit.localDue).toISOString(),
+                dateDue: new Date(submit.nationalDue).toISOString(),
+                frequency: "NONE",
+                type: submit.type === 'HR' ? "HR_REPORT" : "ADMIN_REPORT"
             })))
         },
     
@@ -447,11 +431,12 @@ const resolvers = {
 
         updateReport: async (_: unknown, args: Reports) => {
             // get current report deadline
-            const report = await dataClient.reports.findUnique({
+            const report = await dataClient.submittedReports.findUnique({
                 where: {
                     id: args.id
                 },
                 select: {
+                    reportId: true,
                     localDue: true,
                     nationalDue: true
                 }
@@ -466,13 +451,11 @@ const resolvers = {
             // update report deadline
             const updated = await dataClient.reports.update({
                 where: {
-                    id: args.id
+                    id: report.reportId
                 },
                 data: {
                     name: args.name,
                     basis: args.basis,
-                    localDue: new Date(args.localDue),
-                    nationalDue: new Date(args.nationalDue),
                     frequency: args.frequency,
                     type: args.type
                 },
@@ -595,8 +578,78 @@ const resolvers = {
             });
             
             return submitted;
+        },
+
+        // =============================== SUBMISSIONS ==================================
+
+        createSubmission: async (_: unknown, args: SubmittedReports) => {
+            const report = await dataClient.reports.findUnique({
+                where: {
+                    id: args.reportId
+                }
+            });
+
+            if (!report) throw new GraphQLError('Report does not exist', {
+                extensions: {
+                code: 'BAD_USER_INPUT',
+                },
+            });
+
+            const offices = await dataClient.offices.findMany({
+                select: {
+                    id: true
+                }
+            });
+
+            pubsub.publish('OFFICE_ADMIN', {
+                officeEvents: {
+                    eventName: `CREATED_REPORT_${report.name}`,
+                    eventDate: new Date().toISOString()
+                }
+            })
+
+            for (let i = 0; i < offices.length; i++) {
+                const office = offices[i];
+                await dataClient.submittedReports.create({
+                    data: {
+                        reportId: report.id,
+                        officeId: office.id,
+                        localDue: new Date(args.localDue),
+                        nationalDue: new Date(args.nationalDue),
+                        status: Status.ONGOING
+                    }
+                });
+
+                // trigger create report event
+                pubsub.publish(`OFFICE_${office.id.toString()}`, {
+                    officeEvents: {
+                        eventName: `CREATED_REPORT_${report.name}`,
+                        eventDate: new Date().toISOString()
+                    }
+                })
+            }
+
+            return report;
+        },
+
+        deleteSubmission: async (_: unknown, args: SubmittedReports) => {
+            const submission = await dataClient.submittedReports.findUnique({
+                where: {
+                    id: args.id
+                }
+            });
+
+            await dataClient.submittedReports.deleteMany({
+                where: {
+                    reportId: submission?.reportId,
+                    localDue: submission?.localDue,
+                    nationalDue: submission?.nationalDue
+                }
+            });
+
+            return submission;
         }
-    }
+    },
 };
 
 export default resolvers;

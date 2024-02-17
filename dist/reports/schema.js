@@ -5,9 +5,7 @@ const schema = (0, graphql_tag_1.gql) `
 
     enum Frequency {
         NONE
-        WEEKLY
         MONTHLY
-        QUARTERLY
         YEARLY
     }
 
@@ -41,7 +39,6 @@ const schema = (0, graphql_tag_1.gql) `
         nationalDue: String!
         frequency: Frequency!
         type: ReportType!
-        submissions(date: String!, take: Int): [SubmittedReports!]!
     }
 
     type ReportSummary {
@@ -89,6 +86,9 @@ const schema = (0, graphql_tag_1.gql) `
         deleteReport(id: Int!): Reports!
 
         submitReport(id: Int!, message: String, files: [String!]): SubmittedReports!
+
+        createSubmission(reportId: Int!, localDue: String!, nationalDue: String!): Reports!
+        deleteSubmission(id: Int!): SubmittedReports!
 
         createEvent(subject: String!, description: String!, date: String!, frequency: Frequency!): Events!
         updateEvent(id: Int!, subject: String, description: String, date: String, frequency: Frequency): Events!

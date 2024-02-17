@@ -130,9 +130,7 @@ model Comments {
 
 enum Frequency {
   NONE
-  WEEKLY
   MONTHLY
-  QUARTERLY
   YEARLY
 }
 

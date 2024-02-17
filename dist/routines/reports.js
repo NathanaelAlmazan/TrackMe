@@ -18,8 +18,6 @@ const data_client_1 = __importDefault(require("../data-client"));
 const pubsub_1 = __importDefault(require("../pubsub"));
 function nextDate(date, frequency) {
     switch (frequency) {
-        case client_1.Frequency.WEEKLY:
-            return new Date(date.setDate(date.getDate() + 7));
         case client_1.Frequency.MONTHLY:
             return new Date(date.setMonth(date.getMonth() + 1));
         case client_1.Frequency.YEARLY:
