@@ -46,13 +46,13 @@ const resolvers = {
                     OR: [
                         {
                             localDue: {
-                                lte: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23),
+                                lte: new Date(date.getFullYear(), date.getMonth(), date.getDate() + 2, 0),
                                 gte: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0)
                             }
                         },
                         {
                             nationalDue: {
-                                lte: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23),
+                                lte: new Date(date.getFullYear(), date.getMonth(), date.getDate() + 2, 0),
                                 gte: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0)
                             }
                         }

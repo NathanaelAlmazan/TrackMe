@@ -1,1 +1,0 @@
-{"version":3,"file":"static/js/524.f5393809.chunk.js","mappings":"mJAQA,QANA,WACE,OACEA,EAAAA,EAAAA,KAAA,OAAAC,SAAK,UAET,C","sources":["sections/sample.tsx"],"sourcesContent":["import React from 'react'\r\n\r\nfunction sample() {\r\n  return (\r\n    <div>sample</div>\r\n  )\r\n}\r\n\r\nexport default sample"],"names":["_jsx","children"],"sourceRoot":""}
