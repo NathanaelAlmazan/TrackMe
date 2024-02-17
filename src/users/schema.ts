@@ -5,6 +5,7 @@ const schema = gql`
         id: String!
         name: String!
         officers: [Officers!]!
+        reports(complied: Boolean): [SubmittedReports!]!
     }
 
     enum Role {
@@ -42,6 +43,7 @@ const schema = gql`
         getOffices: [Offices!]!
         getOfficers: [Officers!]!
         getPositions: [Positions!]!
+        getSignatories: [Officers!]!
         loginOfficer(firstName: String!, lastName: String!, password: String!): Officers
         getOfficerById(uuid: String!): Officers
         getNotifications(uuid: String!): [Notifications!]!
@@ -57,7 +59,7 @@ const schema = gql`
         deleteOffice(id: Int!): Offices!
 
         createOfficer(firstName: String!, lastName: String!, positionId: Int!, officeId: Int!, password: String!): Officers!
-        updateOfficer(uuid: String!, firstName: String, lastName: String, positionId: Int, officeId: Int, password: String, signature: String): Officers!
+        updateOfficer(uuid: String!, avatar: String, firstName: String, lastName: String, positionId: Int, officeId: Int, password: String, signature: String): Officers!
         deleteOfficer(uuid: String!): Officers!
         activateOfficer(uuid: String!, active: Boolean!): Officers!
     }

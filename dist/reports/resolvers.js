@@ -17,6 +17,19 @@ const graphql_1 = require("graphql");
 const data_client_1 = __importDefault(require("../data-client"));
 const pubsub_1 = __importDefault(require("../pubsub"));
 const resolvers = {
+    Events: {
+        id: (parent) => {
+            return parent.id.toString();
+        },
+        date: (parent) => {
+            return new Date(parent.date).toISOString();
+        },
+        dateDue: (parent) => {
+            if (!parent.dateDue || parent.dateDue === 'NONE')
+                return null;
+            return new Date(parent.dateDue).toISOString();
+        }
+    },
     Reports: {
         id: (parent) => {
             return parent.id.toString();
@@ -26,7 +39,33 @@ const resolvers = {
         },
         nationalDue: (parent) => {
             return new Date(parent.nationalDue).toISOString();
-        }
+        },
+        submissions: (parent, args) => __awaiter(void 0, void 0, void 0, function* () {
+            const date = new Date(args.date);
+            return yield data_client_1.default.submittedReports.findMany({
+                where: {
+                    reportId: parent.id,
+                    OR: [
+                        {
+                            localDue: {
+                                lte: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23),
+                                gte: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0)
+                            }
+                        },
+                        {
+                            nationalDue: {
+                                lte: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23),
+                                gte: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0)
+                            }
+                        }
+                    ]
+                },
+                orderBy: {
+                    localDue: 'desc'
+                },
+                take: args.take
+            });
+        })
     },
     SubmittedReports: {
         id: (parent) => {
@@ -58,7 +97,19 @@ const resolvers = {
         files: (parent) => {
             var _a;
             return (_a = parent.files) === null || _a === void 0 ? void 0 : _a.split(";");
-        }
+        },
+        pending: (parent) => __awaiter(void 0, void 0, void 0, function* () {
+            const pending = yield data_client_1.default.submittedReports.aggregate({
+                where: {
+                    reportId: parent.reportId,
+                    localDue: parent.localDue,
+                    nationalDue: parent.nationalDue,
+                    status: client_1.Status.ONGOING
+                },
+                _count: true
+            });
+            return pending._count;
+        })
     },
     Query: {
         getReports: () => __awaiter(void 0, void 0, void 0, function* () {
@@ -76,19 +127,44 @@ const resolvers = {
             });
         }),
         getSubmittedReports: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            return yield data_client_1.default.submittedReports.findMany({
-                where: {
-                    officeId: args.officeId
-                },
-                orderBy: {
-                    dateCreated: 'desc'
-                }
-            });
+            if (args.officeId)
+                return yield data_client_1.default.submittedReports.findMany({
+                    where: {
+                        officeId: args.officeId
+                    },
+                    orderBy: {
+                        dateCreated: 'desc'
+                    }
+                });
+            return data_client_1.default.$queryRaw `SELECT DISTINCT ON ("reportId", "localDue", "nationalDue") * FROM public."SubmittedReports"`;
         }),
         getSubmittedReportById: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             return yield data_client_1.default.submittedReports.findUnique({
                 where: {
                     id: args.id
+                }
+            });
+        }),
+        getOfficeSubmissions: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
+            const report = yield data_client_1.default.submittedReports.findUnique({
+                where: {
+                    id: args.id
+                }
+            });
+            if (!report)
+                throw new graphql_1.GraphQLError('Report does not exist', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                    },
+                });
+            return yield data_client_1.default.submittedReports.findMany({
+                where: {
+                    reportId: report.reportId,
+                    localDue: report.localDue,
+                    nationalDue: report.nationalDue
+                },
+                orderBy: {
+                    dateCreated: 'desc'
                 }
             });
         }),
@@ -145,9 +221,152 @@ const resolvers = {
                 pending: ((_b = statistics.find(stats => stats.status === client_1.Status.ONGOING)) === null || _b === void 0 ? void 0 : _b._count._all) || 0,
                 overdue: overdue._count._all
             };
+        }),
+        getEvents: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
+            const today = new Date(args.date).toISOString().split('T')[0];
+            // get events
+            const events = yield data_client_1.default.$queryRaw `SELECT *
+                            FROM public."Events"
+                            WHERE
+                                (
+                                    CASE 
+                                        WHEN EXTRACT(MONTH FROM date) BETWEEN 1 AND 3 THEN 'Q1'
+                                        WHEN EXTRACT(MONTH FROM date) BETWEEN 4 AND 6 THEN 'Q2'
+                                        WHEN EXTRACT(MONTH FROM date) BETWEEN 7 AND 9 THEN 'Q3'
+                                        ELSE 'Q4'
+                                    END =
+                                    CASE 
+                                        WHEN EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD')) BETWEEN 1 AND 3 THEN 'Q1'
+                                        WHEN EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD')) BETWEEN 4 AND 6 THEN 'Q2'
+                                        WHEN EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD')) BETWEEN 7 AND 9 THEN 'Q3'
+                                        ELSE 'Q4'
+                                    END
+                                    AND "frequency" = 'QUARTERLY'
+                                ) OR (
+                                    EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                                    AND "frequency" = 'YEARLY'
+                                ) OR (
+                                    EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                                    AND EXTRACT(YEAR FROM date) = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                                    AND "frequency" = 'NONE'
+                                ) OR "frequency" IN ('WEEKLY', 'MONTHLY')`;
+            // get reports
+            const reports = yield data_client_1.default.$queryRaw `SELECT *
+                                FROM public."Reports"
+                                WHERE
+                                    (
+                                        CASE 
+                                            WHEN EXTRACT(MONTH FROM "localDue") BETWEEN 1 AND 3 THEN 'Q1'
+                                            WHEN EXTRACT(MONTH FROM "localDue") BETWEEN 4 AND 6 THEN 'Q2'
+                                            WHEN EXTRACT(MONTH FROM "localDue") BETWEEN 7 AND 9 THEN 'Q3'
+                                            ELSE 'Q4'
+                                        END =
+                                        CASE 
+                                            WHEN EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD')) BETWEEN 1 AND 3 THEN 'Q1'
+                                            WHEN EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD')) BETWEEN 4 AND 6 THEN 'Q2'
+                                            WHEN EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD')) BETWEEN 7 AND 9 THEN 'Q3'
+                                            ELSE 'Q4'
+                                        END
+                                        AND "frequency" = 'QUARTERLY'
+                                    ) OR (
+                                        EXTRACT(MONTH FROM "localDue") = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                                        AND "frequency" = 'YEARLY'
+                                    ) OR (
+                                        EXTRACT(MONTH FROM "localDue") = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                                        AND EXTRACT(YEAR FROM "localDue") = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                                        AND "frequency" = 'NONE'
+                                    ) OR "frequency" IN ('WEEKLY', 'MONTHLY')`;
+            const documents = yield data_client_1.default.$queryRaw `SELECT *
+                                    FROM public."Documents" doc
+                                    INNER JOIN public."DocumentStatus" status ON status.id = doc."statusId"
+                                    WHERE status.category != 'NOT_ACTIONABLE'
+                                    AND EXTRACT(MONTH FROM "dateDue") = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                                    AND EXTRACT(YEAR FROM "dateDue") = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD'))`;
+            // filter documents by ref number
+            let assigned = [];
+            if (args.officeId) {
+                const office = yield data_client_1.default.offices.findUnique({
+                    where: {
+                        id: args.officeId
+                    },
+                    include: {
+                        referrals: {
+                            select: {
+                                documentId: true
+                            }
+                        }
+                    }
+                });
+                if (office)
+                    assigned = office.referrals.map(ref => ref.documentId);
+            }
+            return events.map(event => ({
+                id: event.id.toString(),
+                subject: event.subject,
+                description: event.description,
+                date: new Date(event.date).toISOString(),
+                dateDue: 'NONE',
+                frequency: event.frequency,
+                type: "EVENT"
+            })).concat(reports.map(report => ({
+                id: report.id.toString(),
+                subject: report.name,
+                description: report.basis,
+                date: new Date(report.localDue).toISOString(),
+                dateDue: new Date(report.nationalDue).toISOString(),
+                frequency: report.frequency,
+                type: report.type === 'HR' ? "HR_REPORT" : "ADMIN_REPORT"
+            }))).concat(documents.filter(document => assigned.includes(document.referenceNum) || !args.officeId).map(document => ({
+                id: document.referenceNum,
+                subject: document.subject,
+                description: document.description,
+                date: new Date(document.dateDue).toISOString(),
+                dateDue: 'NONE',
+                frequency: "NONE",
+                type: "DOCUMENT"
+            })));
+        }),
+        getEventById: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
+            return yield data_client_1.default.events.findUnique({
+                where: {
+                    id: args.id
+                }
+            });
         })
     },
     Mutation: {
+        // ============================== EVENTS ===================================
+        createEvent: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
+            return yield data_client_1.default.events.create({
+                data: {
+                    subject: args.subject,
+                    description: args.description,
+                    date: args.date,
+                    frequency: args.frequency
+                }
+            });
+        }),
+        updateEvent: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
+            return yield data_client_1.default.events.update({
+                where: {
+                    id: args.id
+                },
+                data: {
+                    subject: args.subject,
+                    description: args.description,
+                    date: args.date,
+                    frequency: args.frequency
+                }
+            });
+        }),
+        deleteEvent: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
+            return yield data_client_1.default.events.delete({
+                where: {
+                    id: args.id
+                }
+            });
+        }),
+        // ============================== REPORTS ===================================
         createReport: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             const report = yield data_client_1.default.reports.create({
                 data: {
@@ -155,7 +374,8 @@ const resolvers = {
                     basis: args.basis,
                     localDue: new Date(args.localDue),
                     nationalDue: new Date(args.nationalDue),
-                    frequency: args.frequency
+                    frequency: args.frequency,
+                    type: args.type
                 }
             });
             const offices = yield data_client_1.default.offices.findMany({
@@ -217,7 +437,8 @@ const resolvers = {
                     basis: args.basis,
                     localDue: new Date(args.localDue),
                     nationalDue: new Date(args.nationalDue),
-                    frequency: args.frequency
+                    frequency: args.frequency,
+                    type: args.type
                 },
                 include: {
                     submitted: {

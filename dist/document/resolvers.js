@@ -59,6 +59,15 @@ const resolvers = {
                 }
             });
         }),
+        signatory: (parent) => __awaiter(void 0, void 0, void 0, function* () {
+            if (!parent.signatureId)
+                return null;
+            return yield data_client_1.default.officers.findUnique({
+                where: {
+                    uuid: parent.signatureId
+                }
+            });
+        }),
         dateCreated: (parent) => {
             return parent.dateCreated.toISOString();
         },
@@ -288,7 +297,7 @@ const resolvers = {
         }),
         // ============================== DOCUMENTS ===================================
         createDocument: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            const { subject, description, receivedFrom, typeId, purposeId, statusId, tag, dateDue, refferedTo } = args;
+            const { subject, description, receivedFrom, typeId, purposeId, statusId, signatureId, tag, dateDue, refferedTo } = args;
             // get current count
             const today = new Date();
             const document = yield data_client_1.default.documents.findFirst({
@@ -333,6 +342,7 @@ const resolvers = {
                     typeId: typeId,
                     purposeId: purposeId,
                     statusId: statusId,
+                    signatureId: signatureId,
                     tag: tag,
                     dateDue: new Date(dateDue),
                     referrals: {
@@ -344,7 +354,7 @@ const resolvers = {
             });
         }),
         updateDocument: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            const { referenceNum, subject, description, receivedFrom, typeId, purposeId, statusId, tag, dateDue, refferedTo } = args;
+            const { referenceNum, subject, description, receivedFrom, typeId, purposeId, signatureId, statusId, tag, dateDue, refferedTo } = args;
             // remove former referrals 
             yield data_client_1.default.referrals.deleteMany({
                 where: {
@@ -383,6 +393,7 @@ const resolvers = {
                     typeId: typeId,
                     purposeId: purposeId,
                     statusId: statusId,
+                    signatureId: signatureId,
                     tag: tag,
                     dateDue: new Date(dateDue),
                     referrals: {

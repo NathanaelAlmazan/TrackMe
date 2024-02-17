@@ -57,6 +57,7 @@ const schema = (0, graphql_tag_1.gql) `
         tag: Tags
         dateCreated: String!
         dateDue: String!
+        signatory: Officers!
         refferedTo: [Offices!]!
         comments: [Comments!]!
         
@@ -108,6 +109,7 @@ const schema = (0, graphql_tag_1.gql) `
             statusId: Int!
             tag: Tags
             dateDue: String!
+            signatureId: String!
             refferedTo: [Int!]!
         ): Documents!
 
@@ -121,6 +123,7 @@ const schema = (0, graphql_tag_1.gql) `
             statusId: Int
             tag: Tags
             dateDue: String
+            signatureId: String!
             refferedTo: [Int]
         ): Documents!
 

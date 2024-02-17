@@ -48,6 +48,7 @@ model Officers {
   office      Offices?      @relation(fields: [officeId], references: [id], onDelete: SetNull)
   trails      AuditTrail[]
   comments    Comments[]
+  signed      Documents[]
 }
 
 enum Status {
@@ -83,13 +84,15 @@ model Documents {
   receivedFrom      String             @db.VarChar(100)
   typeId            BigInt?
   purposeId         BigInt?
-  statusId          BigInt?      
+  statusId          BigInt? 
+  signatureId       String?            @db.Uuid
   dateCreated       DateTime           @db.Timestamp(3) @default(now())
   dateDue           DateTime
   tag               String?            @db.VarChar(20)
   type              DocumentTypes?     @relation(fields: [typeId], references: [id], onDelete: SetNull)
   purpose           DocumentPurpose?   @relation(fields: [purposeId], references: [id], onDelete: SetNull)
   status            DocumentStatus?    @relation(fields: [statusId], references: [id], onDelete: SetNull)
+  signatory         Officers?          @relation(fields: [signatureId], references: [uuid], onDelete: SetNull)
   referrals         Referrals[]
   comments          Comments[]
   trails            AuditTrail[]
@@ -129,7 +132,21 @@ enum Frequency {
   NONE
   WEEKLY
   MONTHLY
+  QUARTERLY
   YEARLY
+}
+
+model Events {
+  id            BigInt      @id @default(autoincrement())   
+  subject       String      @db.Text
+  description   String      @db.Text
+  date          DateTime
+  frequency     Frequency
+}
+
+enum ReportType {
+  HR
+  ADMIN
 }
 
 model Reports {
@@ -138,6 +155,7 @@ model Reports {
   basis         String      @db.Text
   localDue      DateTime  
   nationalDue   DateTime
+  type          ReportType  @default(HR)
   frequency     Frequency
   submitted     SubmittedReports[]
 }

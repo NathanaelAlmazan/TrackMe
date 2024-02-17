@@ -1,4 +1,4 @@
-import { Officers, Offices, Positions, Status } from "@prisma/client";
+import { Officers, Offices, Positions, Role, Status } from "@prisma/client";
 import { GraphQLError } from "graphql";
 import bcrypt from "bcrypt";
 import dataClient from "../data-client";
@@ -22,6 +22,15 @@ const resolvers = {
                 },
                 orderBy: {
                     lastName: 'asc'
+                }
+            })
+        },
+
+        reports: async (parent: Offices, args: { complied?: boolean }) => {
+            return await dataClient.submittedReports.findMany({
+                where: {
+                    officeId: parent.id,
+                    status: args.complied ? 'FINISHED' : 'ONGOING'
                 }
             })
         }
@@ -68,6 +77,19 @@ const resolvers = {
 
         getOfficers: async () => {
             return await dataClient.officers.findMany({
+                orderBy: {
+                    firstName: 'asc'
+                }
+            })
+        },
+
+        getSignatories: async () => {
+            return await dataClient.officers.findMany({
+                where: {
+                    position: {
+                        role: Role.DIRECTOR
+                    }
+                },
                 orderBy: {
                     firstName: 'asc'
                 }
@@ -248,13 +270,14 @@ const resolvers = {
         },
 
         updateOfficer: async (_: unknown, args: Officers) => {
-            const { uuid, firstName, lastName, positionId, officeId, password, signature } = args;
+            const { uuid, avatar, firstName, lastName, positionId, officeId, password, signature } = args;
             
             return await dataClient.officers.update({
                 where: {
                     uuid: uuid
                 },
                 data: {
+                    avatar: avatar,
                     firstName: firstName,
                     lastName: lastName,
                     officeId: officeId,

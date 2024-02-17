@@ -70,6 +70,16 @@ const resolvers = {
             })
         },
 
+        signatory: async (parent: Documents) => {
+            if (!parent.signatureId) return null;
+
+            return await dataClient.officers.findUnique({
+                where: {
+                    uuid: parent.signatureId
+                }
+            })
+        },
+
         dateCreated: (parent: Documents) => {
             return parent.dateCreated.toISOString()
         },
@@ -334,7 +344,7 @@ const resolvers = {
         // ============================== DOCUMENTS ===================================
 
         createDocument: async (_: unknown, args: DocumentInput) => {
-            const { subject, description, receivedFrom, typeId, purposeId, statusId, tag, dateDue, refferedTo } = args;
+            const { subject, description, receivedFrom, typeId, purposeId, statusId, signatureId, tag, dateDue, refferedTo } = args;
 
             // get current count
             const today = new Date();
@@ -385,6 +395,7 @@ const resolvers = {
                     typeId: typeId,
                     purposeId: purposeId,
                     statusId: statusId,
+                    signatureId: signatureId,
                     tag: tag,
                     dateDue: new Date(dateDue),
                     referrals: {
@@ -397,7 +408,7 @@ const resolvers = {
         },
 
         updateDocument: async (_: unknown, args: DocumentInput) => {
-            const { referenceNum, subject, description, receivedFrom, typeId, purposeId, statusId, tag, dateDue, refferedTo } = args;
+            const { referenceNum, subject, description, receivedFrom, typeId, purposeId, signatureId, statusId, tag, dateDue, refferedTo } = args;
 
             // remove former referrals 
             await dataClient.referrals.deleteMany({
@@ -441,6 +452,7 @@ const resolvers = {
                     typeId: typeId,
                     purposeId: purposeId,
                     statusId: statusId,
+                    signatureId: signatureId,
                     tag: tag,
                     dateDue: new Date(dateDue),
                     referrals: {

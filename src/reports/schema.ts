@@ -6,8 +6,31 @@ const schema = gql`
         NONE
         WEEKLY
         MONTHLY
+        QUARTERLY
         YEARLY
     }
+
+    enum EventType {
+        EVENT
+        HR_REPORT
+        ADMIN_REPORT
+        DOCUMENT
+    }
+
+    type Events {
+        id: String!
+        subject: String!
+        description: String!
+        date: String!
+        dateDue: String
+        frequency: Frequency!
+        type: EventType
+    }
+
+    enum ReportType {
+        HR
+        ADMIN
+    } 
 
     type Reports {
         id: String!
@@ -16,6 +39,8 @@ const schema = gql`
         localDue: String!
         nationalDue: String!
         frequency: Frequency!
+        type: ReportType!
+        submissions(date: String!, take: Int): [SubmittedReports!]!
     }
 
     type ReportSummary {
@@ -42,6 +67,7 @@ const schema = gql`
         message: String
         files: [String!]
         status: Status!
+        pending: Int!
     }
 
     extend type Query {
@@ -49,16 +75,23 @@ const schema = gql`
         getReportById(id: Int!): Reports!
         getSubmittedReports(officeId: Int): [SubmittedReports!]!
         getSubmittedReportById(id: Int!): SubmittedReports!
+        getOfficeSubmissions(id: Int!): [SubmittedReports!]!
         getReportStatistics(officeId: Int): ReportStatistics!
         getReportSummary: [ReportSummary!]!
+        getEvents(date: String!, officeId: Int): [Events!]!
+        getEventById(id: Int!): Events!
     }
 
     extend type Mutation {
-        createReport(name: String!, basis: String!, localDue: String!, nationalDue: String!, frequency: Frequency!): Reports!
-        updateReport(id: Int!, name: String!, basis: String!, localDue: String!, nationalDue: String!, frequency: Frequency!): Reports!
+        createReport(name: String!, basis: String!, localDue: String!, nationalDue: String!, frequency: Frequency!, type: ReportType!): Reports!
+        updateReport(id: Int!, name: String, basis: String, localDue: String, nationalDue: String, frequency: Frequency, type: ReportType): Reports!
         deleteReport(id: Int!): Reports!
 
         submitReport(id: Int!, message: String, files: [String!]): SubmittedReports!
+
+        createEvent(subject: String!, description: String!, date: String!, frequency: Frequency!): Events!
+        updateEvent(id: Int!, subject: String, description: String, date: String, frequency: Frequency): Events!
+        deleteEvent(id: Int!): Events!
     }
 `;
 

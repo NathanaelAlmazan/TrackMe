@@ -35,6 +35,14 @@ const resolvers = {
                     lastName: 'asc'
                 }
             });
+        }),
+        reports: (parent, args) => __awaiter(void 0, void 0, void 0, function* () {
+            return yield data_client_1.default.submittedReports.findMany({
+                where: {
+                    officeId: parent.id,
+                    status: args.complied ? 'FINISHED' : 'ONGOING'
+                }
+            });
         })
     },
     Officers: {
@@ -74,6 +82,18 @@ const resolvers = {
         }),
         getOfficers: () => __awaiter(void 0, void 0, void 0, function* () {
             return yield data_client_1.default.officers.findMany({
+                orderBy: {
+                    firstName: 'asc'
+                }
+            });
+        }),
+        getSignatories: () => __awaiter(void 0, void 0, void 0, function* () {
+            return yield data_client_1.default.officers.findMany({
+                where: {
+                    position: {
+                        role: client_1.Role.DIRECTOR
+                    }
+                },
                 orderBy: {
                     firstName: 'asc'
                 }
@@ -234,12 +254,13 @@ const resolvers = {
             });
         }),
         updateOfficer: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            const { uuid, firstName, lastName, positionId, officeId, password, signature } = args;
+            const { uuid, avatar, firstName, lastName, positionId, officeId, password, signature } = args;
             return yield data_client_1.default.officers.update({
                 where: {
                     uuid: uuid
                 },
                 data: {
+                    avatar: avatar,
                     firstName: firstName,
                     lastName: lastName,
                     officeId: officeId,
