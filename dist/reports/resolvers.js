@@ -279,7 +279,7 @@ const resolvers = {
                 frequency: event.frequency,
                 type: "EVENT"
             })).concat(reports.filter(report => !submissions.find(sub => sub.reportId === report.id)).map(report => ({
-                id: '',
+                id: report.name,
                 subject: report.name,
                 description: report.basis,
                 date: new Date(report.localDue).toISOString(),
