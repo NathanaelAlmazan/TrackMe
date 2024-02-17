@@ -318,8 +318,8 @@ const resolvers = {
                 type: report.type === 'HR' ? "HR_REPORT" : "ADMIN_REPORT"
             }))).concat(documents.filter(document => assigned.includes(document.referenceNum) || !args.officeId).map(document => ({
                 id: document.referenceNum,
-                subject: document.subject,
-                description: document.description,
+                subject: document.referenceNum,
+                description: document.subject,
                 date: new Date(document.dateDue).toISOString(),
                 dateDue: 'NONE',
                 frequency: "NONE",
