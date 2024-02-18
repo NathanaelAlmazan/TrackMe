@@ -172,7 +172,7 @@ const resolvers = {
                 })
             })).concat(reports.map(report => ({
                 subject: 'Due Report',
-                description: `Please submit ${report.name} before ${new Date(report.dateCreated).toLocaleDateString(undefined, {
+                description: `Please submit ${report.name} before ${new Date(report.localDue).toLocaleDateString(undefined, {
                     month: 'short',
                     day: 'numeric',
                     year: 'numeric',
