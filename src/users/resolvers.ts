@@ -153,7 +153,8 @@ const resolvers = {
             const reports: { name: string, dateCreated: Date, localDue: Date }[] = await dataClient.$queryRaw`
                 SELECT rp."name", sr."dateCreated", sr."localDue" FROM public."SubmittedReports" sr
                 INNER JOIN public."Reports" rp ON rp.id = sr."reportId"
-                WHERE (sr."localDue" - INTERVAL '20 days') < CURRENT_TIMESTAMP
+                WHERE (sr."localDue" - INTERVAL '15 days') < CURRENT_TIMESTAMP
+                AND sr."status" = 'ONGOING'
                 AND sr."officeId" = ${officer.officeId}`;
 
             return documents.map(document => ({
