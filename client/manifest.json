@@ -1,6 +1,7 @@
 {
   "short_name": "TrackMe",
   "name": "TrackMe",
+  "version": "2.0.0",
   "icons": [
     {
       "src": "favicon.ico",

@@ -116,12 +116,20 @@ const resolvers = {
                 }
             });
             if (!officer)
-                return null;
+                throw new graphql_1.GraphQLError('Account does not exist or inactive.', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                    },
+                });
             // verify password
             if (yield bcrypt_1.default.compare(password, officer.password))
                 return officer;
             else
-                return null;
+                throw new graphql_1.GraphQLError('You entered a wrong password.', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                    },
+                });
         }),
         getNotifications: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             // get officer
