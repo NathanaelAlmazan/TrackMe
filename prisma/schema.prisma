@@ -39,16 +39,22 @@ model Officers {
   lastName    String        @db.VarChar(50)
   positionId  BigInt?
   officeId    BigInt?
+  email       String?       @db.VarChar(50) @unique
+  phone       String?       @db.VarChar(10) @unique
   password    String        @db.Text
   signature   String?       @db.Text
   active      Boolean       @default(false)
+  verified    Boolean       @default(false)
   device      String?       @db.Text
+  code        String?       @db.VarChar(8)
   avatar      String        @db.Text @default("/assets/images/avatars/avatar_30.jpg")
   position    Positions?    @relation(fields: [positionId], references: [id], onDelete: SetNull)
   office      Offices?      @relation(fields: [officeId], references: [id], onDelete: SetNull)
   trails      AuditTrail[]
   comments    Comments[]
   signed      Documents[]
+
+  @@unique([firstName, lastName])
 }
 
 enum Status {
@@ -138,6 +144,7 @@ model Events {
   id            BigInt      @id @default(autoincrement())   
   subject       String      @db.Text
   description   String      @db.Text
+  image         String?     @db.Text
   date          DateTime
   frequency     Frequency
 }

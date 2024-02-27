@@ -304,6 +304,7 @@ const resolvers = {
                 id: event.id.toString(),
                 subject: event.subject,
                 description: event.description,
+                image: event.image,
                 date: new Date(event.date).toISOString(),
                 dateDue: '',
                 frequency: event.frequency,
@@ -312,6 +313,7 @@ const resolvers = {
                 id: report.name,
                 subject: report.name,
                 description: report.basis,
+                image: null,
                 date: new Date(report.localDue).toISOString(),
                 dateDue: new Date(report.nationalDue).toISOString(),
                 frequency: report.frequency,
@@ -320,6 +322,7 @@ const resolvers = {
                 id: document.referenceNum,
                 subject: document.referenceNum,
                 description: document.subject,
+                image: null,
                 date: new Date(document.dateDue).toISOString(),
                 dateDue: '',
                 frequency: "NONE",
@@ -328,6 +331,7 @@ const resolvers = {
                 id: submit.id.toString(),
                 subject: submit.name,
                 description: submit.basis,
+                image: null,
                 date: new Date(submit.localDue).toISOString(),
                 dateDue: new Date(submit.nationalDue).toISOString(),
                 frequency: "NONE",
@@ -351,6 +355,7 @@ const resolvers = {
                 data: {
                     subject: args.subject,
                     description: args.description,
+                    image: args.image,
                     date: args.date,
                     frequency: args.frequency
                 }
@@ -365,6 +370,7 @@ const resolvers = {
                 data: {
                     subject: args.subject,
                     description: args.description,
+                    image: args.image,
                     date: args.date,
                     frequency: args.frequency
                 }

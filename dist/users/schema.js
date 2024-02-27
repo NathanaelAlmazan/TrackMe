@@ -29,8 +29,11 @@ const schema = (0, graphql_tag_1.gql) `
         lastName: String!
         position: Positions
         office: Offices
+        email: String
+        phone: String
         signature: String
         active: Boolean!
+        verified: Boolean!
         avatar: String!
     }
 
@@ -48,6 +51,12 @@ const schema = (0, graphql_tag_1.gql) `
         loginOfficer(firstName: String!, lastName: String!, password: String!): Officers
         getOfficerById(uuid: String!): Officers
         getNotifications(uuid: String!): [Notifications!]!
+
+        requestResetPassword(email: String, phone: String): String!
+        confirmResetPassword(email: String, phone: String, code: String!, password: String!): Officers!
+
+        requestAccountVerify(uuid: String!, email: String, phone: String): String!
+        confirmAccountVerify(email: String, phone: String, code: String!): Officers!
     }
 
     extend type Mutation {
@@ -60,7 +69,7 @@ const schema = (0, graphql_tag_1.gql) `
         deleteOffice(id: Int!): Offices!
 
         createOfficer(firstName: String!, lastName: String!, positionId: Int!, officeId: Int!, password: String!): Officers!
-        updateOfficer(uuid: String!, avatar: String, firstName: String, lastName: String, positionId: Int, officeId: Int, password: String, signature: String): Officers!
+        updateOfficer(uuid: String!, avatar: String, firstName: String, lastName: String, email: String, phone: String, positionId: Int, officeId: Int, password: String, signature: String): Officers!
         deleteOfficer(uuid: String!): Officers!
         activateOfficer(uuid: String!, active: Boolean!): Officers!
     }

@@ -20,6 +20,7 @@ const schema = gql`
         subject: String!
         description: String!
         date: String!
+        image: String
         dateDue: String
         frequency: Frequency!
         type: EventType
@@ -89,8 +90,8 @@ const schema = gql`
         createSubmission(reportId: Int!, localDue: String!, nationalDue: String!): Reports!
         deleteSubmission(id: Int!): SubmittedReports!
 
-        createEvent(subject: String!, description: String!, date: String!, frequency: Frequency!): Events!
-        updateEvent(id: Int!, subject: String, description: String, date: String, frequency: Frequency): Events!
+        createEvent(subject: String!, description: String!, image: String, date: String!, frequency: Frequency!): Events!
+        updateEvent(id: Int!, subject: String, description: String, image: String, date: String, frequency: Frequency): Events!
         deleteEvent(id: Int!): Events!
     }
 `;

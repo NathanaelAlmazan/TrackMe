@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const data_client_1 = __importDefault(require("../data-client"));
 const pubsub_1 = __importDefault(require("../pubsub"));
 const documents_1 = require("../routines/documents");
+const graphql_1 = require("graphql");
 const resolvers = {
     DocumentStatus: {
         id: (parent) => {
@@ -237,6 +238,18 @@ const resolvers = {
             });
         }),
         deleteDocumentType: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
+            const types = yield data_client_1.default.documents.aggregate({
+                where: {
+                    typeId: args.id
+                },
+                _count: true
+            });
+            if (types._count > 0)
+                throw new graphql_1.GraphQLError('There are active documents under this type.', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                    },
+                });
             return yield data_client_1.default.documentTypes.delete({
                 where: {
                     id: args.id
@@ -262,6 +275,18 @@ const resolvers = {
             });
         }),
         deleteDocumentPurpose: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
+            const purposes = yield data_client_1.default.documents.aggregate({
+                where: {
+                    purposeId: args.id
+                },
+                _count: true
+            });
+            if (purposes._count > 0)
+                throw new graphql_1.GraphQLError('There are active documents under this purpose.', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                    },
+                });
             return yield data_client_1.default.documentPurpose.delete({
                 where: {
                     id: args.id
@@ -289,6 +314,18 @@ const resolvers = {
             });
         }),
         deleteDocumentStatus: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
+            const status = yield data_client_1.default.documents.aggregate({
+                where: {
+                    statusId: args.id
+                },
+                _count: true
+            });
+            if (status._count > 0)
+                throw new graphql_1.GraphQLError('There are active documents under this status.', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                    },
+                });
             return yield data_client_1.default.documentStatus.delete({
                 where: {
                     id: args.id

@@ -16,6 +16,7 @@ const client_1 = require("@prisma/client");
 const graphql_1 = require("graphql");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const data_client_1 = __importDefault(require("../data-client"));
+const smtp_1 = require("../utils/smtp");
 const resolvers = {
     Positions: {
         id: (parent) => {
@@ -160,7 +161,8 @@ const resolvers = {
             const reports = yield data_client_1.default.$queryRaw `
                 SELECT rp."name", sr."dateCreated", sr."localDue" FROM public."SubmittedReports" sr
                 INNER JOIN public."Reports" rp ON rp.id = sr."reportId"
-                WHERE (sr."localDue" - INTERVAL '20 days') < CURRENT_TIMESTAMP
+                WHERE (sr."localDue" - INTERVAL '15 days') < CURRENT_TIMESTAMP
+                AND sr."status" = 'ONGOING'
                 AND sr."officeId" = ${officer.officeId}`;
             return documents.map(document => ({
                 subject: 'Assigned Document',
@@ -178,7 +180,7 @@ const resolvers = {
                 })
             })).concat(reports.map(report => ({
                 subject: 'Due Report',
-                description: `Please submit ${report.name} before ${new Date(report.dateCreated).toLocaleDateString(undefined, {
+                description: `Please submit ${report.name} before ${new Date(report.localDue).toLocaleDateString(undefined, {
                     month: 'short',
                     day: 'numeric',
                     year: 'numeric',
@@ -191,6 +193,208 @@ const resolvers = {
                     weekday: 'short'
                 })
             })));
+        }),
+        requestResetPassword: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
+            if (!args.email && !args.phone)
+                throw new graphql_1.GraphQLError('Please provide email or phone.', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                    },
+                });
+            // find officer
+            const officer = yield data_client_1.default.officers.findFirst({
+                where: {
+                    OR: [
+                        {
+                            email: args.email
+                        },
+                        {
+                            phone: args.phone
+                        }
+                    ]
+                }
+            });
+            if (!officer)
+                throw new graphql_1.GraphQLError('Account does not exist.', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                    },
+                });
+            // generate code
+            const code = (0, smtp_1.generateSixDigitCode)();
+            yield data_client_1.default.officers.update({
+                where: {
+                    uuid: officer.uuid
+                },
+                data: {
+                    code: code
+                }
+            });
+            // send code
+            try {
+                if (args.email) {
+                    const subject = 'Reset Password';
+                    const message = "A unique code to reset your password has been generated for you.";
+                    const content = (0, smtp_1.compileContent)(officer.firstName, code, message);
+                    yield (0, smtp_1.sendEmail)(args.email, subject, content);
+                    return args.email;
+                }
+                else if (args.phone) {
+                    const message = `${code} is your TrackMe reset password code.`;
+                    yield (0, smtp_1.sendSms)(args.phone, message);
+                    return args.phone;
+                }
+            }
+            catch (err) {
+                throw new graphql_1.GraphQLError('Failed to send reset code.', {
+                    extensions: {
+                        code: 'INTERNAL_SERVER_ERROR',
+                    },
+                });
+            }
+        }),
+        confirmResetPassword: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
+            if (!args.email && !args.phone)
+                throw new graphql_1.GraphQLError('Please provide email or phone.', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                    },
+                });
+            // find officer
+            const officer = yield data_client_1.default.officers.findFirst({
+                where: {
+                    OR: [
+                        {
+                            email: args.email,
+                            code: args.code
+                        },
+                        {
+                            phone: args.phone,
+                            code: args.code
+                        }
+                    ]
+                }
+            });
+            if (!officer)
+                throw new graphql_1.GraphQLError('You entered a wrong code.', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                    },
+                });
+            // update password
+            return yield data_client_1.default.officers.update({
+                where: {
+                    uuid: officer.uuid
+                },
+                data: {
+                    password: yield bcrypt_1.default.hash(args.password, 10),
+                    code: null
+                }
+            });
+        }),
+        requestAccountVerify: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
+            if (!args.email && !args.phone)
+                throw new graphql_1.GraphQLError('Please provide email or phone.', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                    },
+                });
+            // find officer
+            const officer = yield data_client_1.default.officers.findUnique({
+                where: {
+                    uuid: args.uuid
+                }
+            });
+            if (!officer)
+                throw new graphql_1.GraphQLError('Account does not exist.', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                    },
+                });
+            try {
+                // generate code
+                const code = (0, smtp_1.generateSixDigitCode)();
+                let email = !args.email ? undefined : args.email;
+                let phone = !args.phone ? undefined : args.phone;
+                yield data_client_1.default.officers.update({
+                    where: {
+                        uuid: officer.uuid
+                    },
+                    data: {
+                        code: code,
+                        email: email,
+                        phone: phone
+                    }
+                });
+                // send code
+                try {
+                    if (args.email) {
+                        const subject = 'Account Verification';
+                        const message = "A unique code to verify your account has been generated for you.";
+                        const content = (0, smtp_1.compileContent)(officer.firstName, code, message);
+                        yield (0, smtp_1.sendEmail)(args.email, subject, content);
+                        return args.email;
+                    }
+                    else if (args.phone) {
+                        const message = `${code} is your TrackMe account verification code.`;
+                        yield (0, smtp_1.sendSms)(args.phone, message);
+                        return args.phone;
+                    }
+                }
+                catch (err) {
+                    throw new graphql_1.GraphQLError('Failed to send reset code.', {
+                        extensions: {
+                            code: 'INTERNAL_SERVER_ERROR',
+                        },
+                    });
+                }
+            }
+            catch (err) {
+                throw new graphql_1.GraphQLError('Email or phone number is already used.', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                    },
+                });
+            }
+        }),
+        confirmAccountVerify: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
+            if (!args.email && !args.phone)
+                throw new graphql_1.GraphQLError('Please provide email or phone.', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                    },
+                });
+            // find officer
+            const officer = yield data_client_1.default.officers.findFirst({
+                where: {
+                    OR: [
+                        {
+                            email: args.email,
+                            code: args.code
+                        },
+                        {
+                            phone: args.phone,
+                            code: args.code
+                        }
+                    ]
+                }
+            });
+            if (!officer)
+                throw new graphql_1.GraphQLError('Account does not exist.', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                    },
+                });
+            // verify account
+            return yield data_client_1.default.officers.update({
+                where: {
+                    uuid: officer.uuid
+                },
+                data: {
+                    verified: true,
+                    code: null
+                }
+            });
         })
     },
     Mutation: {
@@ -214,6 +418,18 @@ const resolvers = {
             });
         }),
         deletePosition: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
+            const positions = yield data_client_1.default.officers.aggregate({
+                where: {
+                    positionId: args.id
+                },
+                _count: true
+            });
+            if (positions._count > 0)
+                throw new graphql_1.GraphQLError('There are active officers under this position.', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                    },
+                });
             return yield data_client_1.default.positions.delete({
                 where: {
                     id: args.id
@@ -242,6 +458,18 @@ const resolvers = {
         }),
         deleteOffice: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             const { id } = args;
+            const officers = yield data_client_1.default.officers.aggregate({
+                where: {
+                    officeId: args.id
+                },
+                _count: true
+            });
+            if (officers._count > 0)
+                throw new graphql_1.GraphQLError('There are active officers under this office.', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                    },
+                });
             return yield data_client_1.default.offices.delete({
                 where: {
                     id: id
@@ -251,32 +479,54 @@ const resolvers = {
         // ============================== OFFICERS ===================================
         createOfficer: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             const { firstName, lastName, positionId, officeId, password } = args;
-            return yield data_client_1.default.officers.create({
-                data: {
-                    firstName: firstName,
-                    lastName: lastName,
-                    officeId: officeId,
-                    positionId: positionId,
-                    password: yield bcrypt_1.default.hash(password, 12)
-                }
-            });
+            try {
+                return yield data_client_1.default.officers.create({
+                    data: {
+                        firstName: firstName,
+                        lastName: lastName,
+                        officeId: officeId,
+                        positionId: positionId,
+                        password: yield bcrypt_1.default.hash(password, 12)
+                    }
+                });
+            }
+            catch (err) {
+                throw new graphql_1.GraphQLError('Account already exists.', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                    },
+                });
+            }
         }),
         updateOfficer: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             const { uuid, avatar, firstName, lastName, positionId, officeId, password, signature } = args;
-            return yield data_client_1.default.officers.update({
-                where: {
-                    uuid: uuid
-                },
-                data: {
-                    avatar: avatar,
-                    firstName: firstName,
-                    lastName: lastName,
-                    officeId: officeId,
-                    positionId: positionId,
-                    password: password ? yield bcrypt_1.default.hash(password, 12) : undefined,
-                    signature: signature
-                }
-            });
+            let email = !args.email ? undefined : args.email;
+            let phone = !args.phone ? undefined : args.phone;
+            try {
+                return yield data_client_1.default.officers.update({
+                    where: {
+                        uuid: uuid
+                    },
+                    data: {
+                        avatar: avatar,
+                        firstName: firstName,
+                        lastName: lastName,
+                        email: email,
+                        phone: phone,
+                        officeId: officeId,
+                        positionId: positionId,
+                        password: password ? yield bcrypt_1.default.hash(password, 12) : undefined,
+                        signature: signature
+                    }
+                });
+            }
+            catch (err) {
+                throw new graphql_1.GraphQLError('Email or phone number is already used.', {
+                    extensions: {
+                        code: 'BAD_USER_INPUT',
+                    },
+                });
+            }
         }),
         deleteOfficer: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             const { uuid } = args;

@@ -1,7 +1,19 @@
-import { Officers, Offices, Positions, Role, Status } from "@prisma/client";
+import { 
+    Officers, 
+    Offices, 
+    Positions, 
+    Role, 
+    Status 
+} from "@prisma/client";
 import { GraphQLError } from "graphql";
 import bcrypt from "bcrypt";
 import dataClient from "../data-client";
+import { 
+    compileContent, 
+    generateSixDigitCode, 
+    sendEmail,
+    sendSms
+} from "../utils/smtp";
 
 const resolvers = {
     Positions: {
@@ -194,6 +206,217 @@ const resolvers = {
                     weekday: 'short'
                 })
             })));
+        },
+
+        requestResetPassword: async (_: unknown, args: { email?: string, phone?: string }) => {
+            if (!args.email && !args.phone) throw new GraphQLError('Please provide email or phone.', {
+                extensions: {
+                  code: 'BAD_USER_INPUT',
+                },
+            });
+
+            // find officer
+            const officer = await dataClient.officers.findFirst({
+                where: {
+                    OR: [
+                        {
+                            email: args.email
+                        },
+                        {
+                            phone: args.phone
+                        }
+                    ]
+                }
+            });
+
+            if (!officer) throw new GraphQLError('Account does not exist.', {
+                extensions: {
+                  code: 'BAD_USER_INPUT',
+                },
+            });
+
+            // generate code
+            const code = generateSixDigitCode();
+            await dataClient.officers.update({
+                where: {
+                    uuid: officer.uuid
+                },
+                data: {
+                    code: code
+                }
+            });
+
+            // send code
+            try {
+                if (args.email) {
+                    const subject = 'Reset Password';
+                    const message = "A unique code to reset your password has been generated for you.";
+                    const content = compileContent(officer.firstName, code, message);
+                    await sendEmail(args.email, subject, content);
+
+                    return args.email;
+                } else if (args.phone) {
+                    const message = `${code} is your TrackMe reset password code.`;
+                    await sendSms(args.phone, message);
+
+                    return args.phone;
+                }
+            } catch(err) {
+                throw new GraphQLError('Failed to send reset code.', {
+                    extensions: {
+                      code: 'INTERNAL_SERVER_ERROR',
+                    },
+                });
+            }
+        },
+
+        confirmResetPassword: async (_: unknown, args: { email?: string, phone?: string, code: string, password: string }) => {
+            if (!args.email &&!args.phone) throw new GraphQLError('Please provide email or phone.', {
+                extensions: {
+                  code: 'BAD_USER_INPUT',
+                },
+            });
+
+             // find officer
+            const officer = await dataClient.officers.findFirst({
+                where: {
+                    OR: [
+                        {
+                            email: args.email,
+                            code: args.code
+                        },
+                        {
+                            phone: args.phone,
+                            code: args.code
+                        }
+                    ]
+                }
+            });
+
+            if (!officer) throw new GraphQLError('You entered a wrong code.', {
+                extensions: {
+                  code: 'BAD_USER_INPUT',
+                },
+            });
+
+            // update password
+            return await dataClient.officers.update({
+                where: {
+                    uuid: officer.uuid
+                },
+                data: {
+                    password: await bcrypt.hash(args.password, 10),
+                    code: null
+                }
+            });
+        },
+
+        requestAccountVerify: async (_: unknown, args: { uuid: string, email?: string, phone?: string }) => {
+            if (!args.email && !args.phone) throw new GraphQLError('Please provide email or phone.', {
+                extensions: {
+                  code: 'BAD_USER_INPUT',
+                },
+            });
+
+            // find officer
+            const officer = await dataClient.officers.findUnique({
+                where: {
+                    uuid: args.uuid
+                }
+            });
+
+            if (!officer) throw new GraphQLError('Account does not exist.', {
+                extensions: {
+                  code: 'BAD_USER_INPUT',
+                },
+            });
+
+            try {
+                // generate code
+                const code = generateSixDigitCode();
+                let email = !args.email ? undefined : args.email;
+                let phone = !args.phone ? undefined : args.phone;
+                await dataClient.officers.update({
+                    where: {
+                        uuid: officer.uuid
+                    },
+                    data: {
+                        code: code,
+                        email: email,
+                        phone: phone
+                    }
+                });
+
+                // send code
+                try {
+                    if (args.email) {
+                        const subject = 'Account Verification';
+                        const message = "A unique code to verify your account has been generated for you.";
+                        const content = compileContent(officer.firstName, code, message);
+                        await sendEmail(args.email, subject, content);
+
+                        return args.email;
+                    } else if (args.phone) {
+                        const message = `${code} is your TrackMe account verification code.`;
+                        await sendSms(args.phone, message);
+
+                        return args.phone;
+                    }
+                } catch(err) {
+                    throw new GraphQLError('Failed to send reset code.', {
+                        extensions: {
+                        code: 'INTERNAL_SERVER_ERROR',
+                        },
+                    });
+                }
+            } catch(err) {
+                throw new GraphQLError('Email or phone number is already used.', {
+                    extensions: {
+                      code: 'BAD_USER_INPUT',
+                    },
+                });
+            }
+        },
+
+        confirmAccountVerify: async (_: unknown, args: { email?: string, phone?: string, code: string }) => {
+            if (!args.email && !args.phone) throw new GraphQLError('Please provide email or phone.', {
+                extensions: {
+                  code: 'BAD_USER_INPUT',
+                },
+            });
+
+            // find officer
+            const officer = await dataClient.officers.findFirst({
+                where: {
+                    OR: [
+                        {
+                            email: args.email,
+                            code: args.code
+                        },
+                        {
+                            phone: args.phone,
+                            code: args.code
+                        }
+                    ]
+                }
+            });
+
+            if (!officer) throw new GraphQLError('Account does not exist.', {
+                extensions: {
+                  code: 'BAD_USER_INPUT',
+                },
+            });
+
+            // verify account
+            return await dataClient.officers.update({
+                where: {
+                    uuid: officer.uuid
+                },
+                data: {
+                    verified: true,
+                    code: null
+                }
+            });
         }
     },
 
@@ -220,6 +443,19 @@ const resolvers = {
         },
 
         deletePosition: async (_: unknown, args: Positions) => {
+            const positions = await dataClient.officers.aggregate({
+                where: {
+                    positionId: args.id
+                },
+                _count: true
+            });
+
+            if (positions._count > 0) throw new GraphQLError('There are active officers under this position.', {
+                extensions: {
+                  code: 'BAD_USER_INPUT',
+                },
+            });
+
             return await dataClient.positions.delete({
                 where: {
                     id: args.id
@@ -254,6 +490,18 @@ const resolvers = {
 
         deleteOffice: async (_: unknown, args: Offices) => {
             const { id } = args;
+            const officers = await dataClient.officers.aggregate({
+                where: {
+                    officeId: args.id
+                },
+                _count: true
+            });
+
+            if (officers._count > 0) throw new GraphQLError('There are active officers under this office.', {
+                extensions: {
+                  code: 'BAD_USER_INPUT',
+                },
+            });
 
             return await dataClient.offices.delete({
                 where: {
@@ -267,34 +515,54 @@ const resolvers = {
         createOfficer: async (_: unknown, args: Officers) => {
             const { firstName, lastName, positionId, officeId, password } = args;
 
-            return await dataClient.officers.create({
-                data: {
-                    firstName: firstName,
-                    lastName: lastName,
-                    officeId: officeId,
-                    positionId: positionId,
-                    password: await bcrypt.hash(password, 12)
-                }
-            })
+            try {
+                return await dataClient.officers.create({
+                    data: {
+                        firstName: firstName,
+                        lastName: lastName,
+                        officeId: officeId,
+                        positionId: positionId,
+                        password: await bcrypt.hash(password, 12)
+                    }
+                })
+            } catch (err) {
+                throw new GraphQLError('Account already exists.', {
+                    extensions: {
+                      code: 'BAD_USER_INPUT',
+                    },
+                });
+            }
         },
 
         updateOfficer: async (_: unknown, args: Officers) => {
             const { uuid, avatar, firstName, lastName, positionId, officeId, password, signature } = args;
             
-            return await dataClient.officers.update({
-                where: {
-                    uuid: uuid
-                },
-                data: {
-                    avatar: avatar,
-                    firstName: firstName,
-                    lastName: lastName,
-                    officeId: officeId,
-                    positionId: positionId,
-                    password: password ? await bcrypt.hash(password, 12) : undefined,
-                    signature: signature
-                }
-            })
+            let email = !args.email ? undefined : args.email;
+            let phone = !args.phone ? undefined : args.phone;
+            try {
+                return await dataClient.officers.update({
+                    where: {
+                        uuid: uuid
+                    },
+                    data: {
+                        avatar: avatar,
+                        firstName: firstName,
+                        lastName: lastName,
+                        email: email,
+                        phone: phone,
+                        officeId: officeId,
+                        positionId: positionId,
+                        password: password ? await bcrypt.hash(password, 12) : undefined,
+                        signature: signature
+                    }
+                });
+            } catch(err) {
+                throw new GraphQLError('Email or phone number is already used.', {
+                    extensions: {
+                      code: 'BAD_USER_INPUT',
+                    },
+                });
+            }
         },
 
         deleteOfficer: async (_: unknown, args: Officers) => {

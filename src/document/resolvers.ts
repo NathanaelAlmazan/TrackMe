@@ -8,6 +8,7 @@ import {
 import dataClient from "../data-client";
 import pubsub from "../pubsub";
 import { sendNotification } from "../routines/documents";
+import { GraphQLError } from "graphql";
 
 interface DocumentInput extends Documents {
     refferedTo: number[]
@@ -274,6 +275,19 @@ const resolvers = {
         },
 
         deleteDocumentType: async (_: unknown, args: DocumentTypes) => {
+            const types = await dataClient.documents.aggregate({
+                where: {
+                    typeId: args.id
+                },
+                _count: true
+            });
+
+            if (types._count > 0) throw new GraphQLError('There are active documents under this type.', {
+                extensions: {
+                  code: 'BAD_USER_INPUT',
+                },
+            });
+
             return await dataClient.documentTypes.delete({
                 where: {
                     id: args.id
@@ -303,6 +317,19 @@ const resolvers = {
         },
 
         deleteDocumentPurpose: async (_: unknown, args: DocumentPurpose) => {
+            const purposes = await dataClient.documents.aggregate({
+                where: {
+                    purposeId: args.id
+                },
+                _count: true
+            });
+
+            if (purposes._count > 0) throw new GraphQLError('There are active documents under this purpose.', {
+                extensions: {
+                  code: 'BAD_USER_INPUT',
+                },
+            });
+
             return await dataClient.documentPurpose.delete({
                 where: {
                     id: args.id
@@ -334,6 +361,19 @@ const resolvers = {
         },
 
         deleteDocumentStatus: async (_: unknown, args: DocumentStatus) => {
+            const status = await dataClient.documents.aggregate({
+                where: {
+                    statusId: args.id
+                },
+                _count: true
+            });
+
+            if (status._count > 0) throw new GraphQLError('There are active documents under this status.', {
+                extensions: {
+                  code: 'BAD_USER_INPUT',
+                },
+            });
+
             return await dataClient.documentStatus.delete({
                 where: {
                     id: args.id
