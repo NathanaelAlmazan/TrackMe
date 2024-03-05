@@ -161,21 +161,34 @@ const resolvers = {
             const reports = yield data_client_1.default.$queryRaw `
                 SELECT rp."name", sr."dateCreated", sr."localDue" FROM public."SubmittedReports" sr
                 INNER JOIN public."Reports" rp ON rp.id = sr."reportId"
-                WHERE (sr."localDue" - INTERVAL '15 days') < CURRENT_TIMESTAMP
+                WHERE (sr."localDue" - INTERVAL '7 days') < CURRENT_TIMESTAMP
                 AND sr."status" = 'ONGOING'
                 AND sr."officeId" = ${officer.officeId}`;
+            const events = yield data_client_1.default.$queryRaw `
+                SELECT * FROM public."Events"
+                WHERE (
+                        EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM CURRENT_TIMESTAMP)
+                        AND EXTRACT(DAY FROM date) = EXTRACT(DAY FROM CURRENT_TIMESTAMP)
+                        AND frequency = 'YEARLY'
+                    ) OR (
+                        EXTRACT(DAY FROM date) = EXTRACT(DAY FROM CURRENT_TIMESTAMP)
+                        AND frequency = 'MONTHLY'
+                    ) OR (
+                        EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM CURRENT_TIMESTAMP)
+                        AND EXTRACT(DAY FROM date) = EXTRACT(DAY FROM CURRENT_TIMESTAMP)
+                        AND EXTRACT(YEAR FROM date) = EXTRACT(YEAR FROM CURRENT_TIMESTAMP)
+                        AND frequency = 'NONE'
+                    )`;
             return documents.map(document => ({
                 subject: 'Assigned Document',
                 description: `Document ${document.referenceNum} has been assigned to your office for completion by ${new Date(document.dateDue).toLocaleDateString(undefined, {
                     month: 'short',
                     day: 'numeric',
-                    year: 'numeric',
                     weekday: 'short'
                 })}`,
                 timestamp: new Date(document.dateCreated).toLocaleDateString(undefined, {
                     month: 'short',
                     day: 'numeric',
-                    year: 'numeric',
                     weekday: 'short'
                 })
             })).concat(reports.map(report => ({
@@ -183,13 +196,19 @@ const resolvers = {
                 description: `Please submit ${report.name} before ${new Date(report.localDue).toLocaleDateString(undefined, {
                     month: 'short',
                     day: 'numeric',
-                    year: 'numeric',
                     weekday: 'short'
                 })}`,
                 timestamp: new Date(report.dateCreated).toLocaleDateString(undefined, {
                     month: 'short',
                     day: 'numeric',
-                    year: 'numeric',
+                    weekday: 'short'
+                })
+            }))).concat(events.map(event => ({
+                subject: 'Event',
+                description: event.subject,
+                timestamp: new Date(event.date).toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
                     weekday: 'short'
                 })
             })));
