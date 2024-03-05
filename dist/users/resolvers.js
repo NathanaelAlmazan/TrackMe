@@ -17,6 +17,7 @@ const graphql_1 = require("graphql");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const data_client_1 = __importDefault(require("../data-client"));
 const smtp_1 = require("../utils/smtp");
+const dates_1 = require("../utils/dates");
 const resolvers = {
     Positions: {
         id: (parent) => {
@@ -133,10 +134,18 @@ const resolvers = {
                 });
         }),
         getNotifications: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
+            var _a;
             // get officer
             const officer = yield data_client_1.default.officers.findUnique({
                 where: {
                     uuid: args.uuid
+                },
+                include: {
+                    position: {
+                        select: {
+                            role: true
+                        }
+                    }
                 }
             });
             if (!officer || !officer.officeId)
@@ -145,6 +154,91 @@ const resolvers = {
                         code: 'BAD_USER_INPUT',
                     },
                 });
+            const events = yield data_client_1.default.$queryRaw `
+                SELECT * FROM public."Events"
+                WHERE (
+                        EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM CURRENT_TIMESTAMP)
+                        AND EXTRACT(DAY FROM date) = EXTRACT(DAY FROM CURRENT_TIMESTAMP)
+                        AND frequency = 'YEARLY'
+                    ) OR (
+                        EXTRACT(DAY FROM date) = EXTRACT(DAY FROM CURRENT_TIMESTAMP)
+                        AND frequency = 'MONTHLY'
+                    ) OR (
+                        EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM CURRENT_TIMESTAMP)
+                        AND EXTRACT(DAY FROM date) = EXTRACT(DAY FROM CURRENT_TIMESTAMP)
+                        AND EXTRACT(YEAR FROM date) = EXTRACT(YEAR FROM CURRENT_TIMESTAMP)
+                        AND frequency = 'NONE'
+                    )`;
+            if (((_a = officer.position) === null || _a === void 0 ? void 0 : _a.role) === client_1.Role.DIRECTOR) {
+                const documents = yield data_client_1.default.documents.findMany({
+                    where: {
+                        dateDue: {
+                            lt: new Date()
+                        },
+                        status: {
+                            OR: [
+                                {
+                                    category: client_1.Status.ONGOING
+                                },
+                                {
+                                    category: client_1.Status.NOT_STARTED
+                                }
+                            ]
+                        }
+                    }
+                });
+                const submissions = yield data_client_1.default.submittedReports.findMany({
+                    where: {
+                        localDue: {
+                            lt: new Date()
+                        },
+                        status: client_1.Status.ONGOING
+                    },
+                    include: {
+                        report: {
+                            select: {
+                                name: true
+                            }
+                        }
+                    }
+                });
+                const reports = yield data_client_1.default.reports.findMany({
+                    where: {
+                        id: {
+                            in: Array.from(new Set(submissions.map(sub => sub.reportId)))
+                        }
+                    }
+                });
+                return documents.map(document => ({
+                    subject: 'Assigned Document',
+                    description: `Document ${document.referenceNum} is ${(0, dates_1.getDayDiff)(document.dateDue)} days overdue.`,
+                    timestamp: new Date(document.dateDue).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        weekday: 'short'
+                    })
+                })).concat(reports.map(report => {
+                    const offices = submissions.filter(sub => sub.reportId === report.id);
+                    const overdue = offices[0].localDue;
+                    return {
+                        subject: 'Due Report',
+                        description: `${report.name} is ${(0, dates_1.getDayDiff)(overdue)} days overdue. Waiting for ${offices.length} offices.`,
+                        timestamp: new Date(overdue).toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                            weekday: 'short'
+                        })
+                    };
+                })).concat(events.map(event => ({
+                    subject: 'Event',
+                    description: event.subject,
+                    timestamp: new Date(event.date).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        weekday: 'short'
+                    })
+                })));
+            }
             // get document notifications
             const documents = yield data_client_1.default.documents.findMany({
                 where: {
@@ -164,21 +258,6 @@ const resolvers = {
                 WHERE (sr."localDue" - INTERVAL '7 days') < CURRENT_TIMESTAMP
                 AND sr."status" = 'ONGOING'
                 AND sr."officeId" = ${officer.officeId}`;
-            const events = yield data_client_1.default.$queryRaw `
-                SELECT * FROM public."Events"
-                WHERE (
-                        EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM CURRENT_TIMESTAMP)
-                        AND EXTRACT(DAY FROM date) = EXTRACT(DAY FROM CURRENT_TIMESTAMP)
-                        AND frequency = 'YEARLY'
-                    ) OR (
-                        EXTRACT(DAY FROM date) = EXTRACT(DAY FROM CURRENT_TIMESTAMP)
-                        AND frequency = 'MONTHLY'
-                    ) OR (
-                        EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM CURRENT_TIMESTAMP)
-                        AND EXTRACT(DAY FROM date) = EXTRACT(DAY FROM CURRENT_TIMESTAMP)
-                        AND EXTRACT(YEAR FROM date) = EXTRACT(YEAR FROM CURRENT_TIMESTAMP)
-                        AND frequency = 'NONE'
-                    )`;
             return documents.map(document => ({
                 subject: 'Assigned Document',
                 description: `Document ${document.referenceNum} has been assigned to your office for completion by ${new Date(document.dateDue).toLocaleDateString(undefined, {

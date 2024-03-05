@@ -15,6 +15,7 @@ import {
     sendEmail,
     sendSms
 } from "../utils/smtp";
+import { getDayDiff } from "../utils/dates";
 
 const resolvers = {
     Positions: {
@@ -148,6 +149,13 @@ const resolvers = {
             const officer = await dataClient.officers.findUnique({
                 where: {
                     uuid: args.uuid
+                },
+                include: {
+                    position: {
+                        select: {
+                            role: true
+                        }
+                    }
                 }
             });
 
@@ -156,6 +164,97 @@ const resolvers = {
                   code: 'BAD_USER_INPUT',
                 },
             });
+
+            const events: Events[] = await dataClient.$queryRaw`
+                SELECT * FROM public."Events"
+                WHERE (
+                        EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM CURRENT_TIMESTAMP)
+                        AND EXTRACT(DAY FROM date) = EXTRACT(DAY FROM CURRENT_TIMESTAMP)
+                        AND frequency = 'YEARLY'
+                    ) OR (
+                        EXTRACT(DAY FROM date) = EXTRACT(DAY FROM CURRENT_TIMESTAMP)
+                        AND frequency = 'MONTHLY'
+                    ) OR (
+                        EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM CURRENT_TIMESTAMP)
+                        AND EXTRACT(DAY FROM date) = EXTRACT(DAY FROM CURRENT_TIMESTAMP)
+                        AND EXTRACT(YEAR FROM date) = EXTRACT(YEAR FROM CURRENT_TIMESTAMP)
+                        AND frequency = 'NONE'
+                    )`;
+
+            if (officer.position?.role === Role.DIRECTOR) {
+                const documents = await dataClient.documents.findMany({
+                    where: {
+                        dateDue: {
+                            lt: new Date()
+                        },
+                        status: {
+                            OR: [
+                                {
+                                    category: Status.ONGOING
+                                },
+                                {
+                                    category: Status.NOT_STARTED
+                                }
+                            ]
+                        }
+                    }
+                });
+
+                const submissions = await dataClient.submittedReports.findMany({
+                    where: {
+                        localDue: {
+                            lt: new Date()
+                        },
+                        status: Status.ONGOING
+                    },
+                    include: {
+                        report: {
+                            select: {
+                                name: true
+                            }
+                        }
+                    }
+                });
+
+                const reports = await dataClient.reports.findMany({
+                    where: {
+                        id: {
+                            in: Array.from(new Set(submissions.map(sub => sub.reportId)))
+                        }
+                    }
+                });
+
+                return documents.map(document => ({
+                    subject: 'Assigned Document',
+                    description: `Document ${document.referenceNum} is ${getDayDiff(document.dateDue)} days overdue.`,
+                    timestamp: new Date(document.dateDue).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        weekday: 'short'
+                    })
+                })).concat(reports.map(report => {
+                    const offices = submissions.filter(sub => sub.reportId === report.id);
+                    const overdue = offices[0].localDue;
+
+                    return {
+                        subject: 'Due Report',
+                        description: `${report.name} is ${getDayDiff(overdue)} days overdue. Waiting for ${offices.length} offices.`,
+                        timestamp: new Date(overdue).toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                            weekday: 'short'
+                        })
+                    }
+                })).concat(events.map(event => ({
+                    subject: 'Event',
+                    description: event.subject,
+                    timestamp: new Date(event.date).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        weekday: 'short'
+                    })
+                })));
+            }
 
             // get document notifications
             const documents = await dataClient.documents.findMany({
@@ -177,22 +276,6 @@ const resolvers = {
                 WHERE (sr."localDue" - INTERVAL '7 days') < CURRENT_TIMESTAMP
                 AND sr."status" = 'ONGOING'
                 AND sr."officeId" = ${officer.officeId}`;
-
-            const events: Events[] = await dataClient.$queryRaw`
-                SELECT * FROM public."Events"
-                WHERE (
-                        EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM CURRENT_TIMESTAMP)
-                        AND EXTRACT(DAY FROM date) = EXTRACT(DAY FROM CURRENT_TIMESTAMP)
-                        AND frequency = 'YEARLY'
-                    ) OR (
-                        EXTRACT(DAY FROM date) = EXTRACT(DAY FROM CURRENT_TIMESTAMP)
-                        AND frequency = 'MONTHLY'
-                    ) OR (
-                        EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM CURRENT_TIMESTAMP)
-                        AND EXTRACT(DAY FROM date) = EXTRACT(DAY FROM CURRENT_TIMESTAMP)
-                        AND EXTRACT(YEAR FROM date) = EXTRACT(YEAR FROM CURRENT_TIMESTAMP)
-                        AND frequency = 'NONE'
-                    )`;
 
             return documents.map(document => ({
                 subject: 'Assigned Document',
