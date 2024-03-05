@@ -1,10 +1,10 @@
 {
   "files": {
     "main.css": "https://rr6manila.com/static/css/main.b2127959.css",
-    "main.js": "https://rr6manila.com/static/js/main.3dce51ac.js",
+    "main.js": "https://rr6manila.com/static/js/main.28b00790.js",
     "static/js/916.c23f81be.chunk.js": "https://rr6manila.com/static/js/916.c23f81be.chunk.js",
     "static/js/92.0672e3d5.chunk.js": "https://rr6manila.com/static/js/92.0672e3d5.chunk.js",
-    "static/js/152.34fbfbac.chunk.js": "https://rr6manila.com/static/js/152.34fbfbac.chunk.js",
+    "static/js/152.068f8913.chunk.js": "https://rr6manila.com/static/js/152.068f8913.chunk.js",
     "static/js/896.85f656ff.chunk.js": "https://rr6manila.com/static/js/896.85f656ff.chunk.js",
     "static/js/172.3a3f4ea7.chunk.js": "https://rr6manila.com/static/js/172.3a3f4ea7.chunk.js",
     "static/js/160.2361ffec.chunk.js": "https://rr6manila.com/static/js/160.2361ffec.chunk.js",
@@ -30,10 +30,10 @@
     "service-worker.js": "https://rr6manila.com/service-worker.js",
     "index.html": "https://rr6manila.com/index.html",
     "main.b2127959.css.map": "https://rr6manila.com/static/css/main.b2127959.css.map",
-    "main.3dce51ac.js.map": "https://rr6manila.com/static/js/main.3dce51ac.js.map",
+    "main.28b00790.js.map": "https://rr6manila.com/static/js/main.28b00790.js.map",
     "916.c23f81be.chunk.js.map": "https://rr6manila.com/static/js/916.c23f81be.chunk.js.map",
     "92.0672e3d5.chunk.js.map": "https://rr6manila.com/static/js/92.0672e3d5.chunk.js.map",
-    "152.34fbfbac.chunk.js.map": "https://rr6manila.com/static/js/152.34fbfbac.chunk.js.map",
+    "152.068f8913.chunk.js.map": "https://rr6manila.com/static/js/152.068f8913.chunk.js.map",
     "896.85f656ff.chunk.js.map": "https://rr6manila.com/static/js/896.85f656ff.chunk.js.map",
     "172.3a3f4ea7.chunk.js.map": "https://rr6manila.com/static/js/172.3a3f4ea7.chunk.js.map",
     "160.2361ffec.chunk.js.map": "https://rr6manila.com/static/js/160.2361ffec.chunk.js.map",
@@ -59,6 +59,6 @@
   },
   "entrypoints": [
     "static/css/main.b2127959.css",
-    "static/js/main.3dce51ac.js"
+    "static/js/main.28b00790.js"
   ]
 }
