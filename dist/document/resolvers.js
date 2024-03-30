@@ -32,6 +32,33 @@ const resolvers = {
             return parent.id.toString();
         }
     },
+    Referrals: {
+        office: (parent) => __awaiter(void 0, void 0, void 0, function* () {
+            return yield data_client_1.default.offices.findUnique({
+                where: {
+                    id: parent.officeId
+                }
+            });
+        }),
+        status: (parent) => __awaiter(void 0, void 0, void 0, function* () {
+            if (!parent.statusId)
+                return null;
+            return yield data_client_1.default.documentStatus.findUnique({
+                where: {
+                    id: parent.statusId
+                }
+            });
+        }),
+        assigned: (parent) => __awaiter(void 0, void 0, void 0, function* () {
+            if (!parent.assignedId)
+                return null;
+            return yield data_client_1.default.officers.findUnique({
+                where: {
+                    uuid: parent.assignedId
+                }
+            });
+        }),
+    },
     Documents: {
         type: (parent) => __awaiter(void 0, void 0, void 0, function* () {
             if (!parent.typeId)
@@ -51,15 +78,6 @@ const resolvers = {
                 }
             });
         }),
-        status: (parent) => __awaiter(void 0, void 0, void 0, function* () {
-            if (!parent.statusId)
-                return null;
-            return yield data_client_1.default.documentStatus.findUnique({
-                where: {
-                    id: parent.statusId
-                }
-            });
-        }),
         signatory: (parent) => __awaiter(void 0, void 0, void 0, function* () {
             if (!parent.signatureId)
                 return null;
@@ -75,16 +93,13 @@ const resolvers = {
         dateDue: (parent) => {
             return parent.dateDue.toISOString();
         },
-        refferedTo: (parent) => __awaiter(void 0, void 0, void 0, function* () {
+        referredTo: (parent) => __awaiter(void 0, void 0, void 0, function* () {
             const referrals = yield data_client_1.default.referrals.findMany({
                 where: {
                     documentId: parent.referenceNum
-                },
-                select: {
-                    office: true
                 }
             });
-            return referrals.map(refer => refer.office);
+            return referrals;
         }),
         comments: (parent) => __awaiter(void 0, void 0, void 0, function* () {
             return yield data_client_1.default.comments.findMany({
@@ -180,10 +195,11 @@ const resolvers = {
         }),
         getDocumentSummary: () => __awaiter(void 0, void 0, void 0, function* () {
             const summary = yield data_client_1.default.$queryRaw `
-                SELECT rfl."officeId", sts.category, COUNT(*) FROM public."Documents" doc
-                INNER JOIN public."DocumentStatus" sts ON sts.id = doc."statusId"
-                INNER JOIN public."Referrals" rfl ON rfl."documentId" = doc."referenceNum"
-                GROUP BY rfl."officeId", sts.category`;
+                SELECT rfl."officeId", status.category, COUNT(*) 
+                FROM public."Referrals" rfl
+                INNER JOIN public."DocumentStatus" status
+                ON status.id = rfl."statusId"
+                GROUP BY rfl."officeId", status.category;`;
             const offices = yield data_client_1.default.offices.findMany();
             return offices.map(office => ({
                 office: office.name,
@@ -196,19 +212,23 @@ const resolvers = {
         getDocumentStatistics: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             let statistics;
             if (args.officeId) {
-                statistics = yield data_client_1.default.$queryRaw `SELECT status.category, COUNT(DISTINCT doc."referenceNum") FROM public."Documents" doc
-                INNER JOIN public."Referrals" rfl ON rfl."documentId" = doc."referenceNum"
-                INNER JOIN public."DocumentStatus" status
-                ON status.id = doc."statusId"
-                WHERE rfl."officeId" = ${args.officeId}
-                GROUP BY status.category`;
+                // statistics for each offices
+                statistics = yield data_client_1.default.$queryRaw `
+                    SELECT rfl."documentId", status.category, COUNT(*) 
+                    FROM public."Referrals" rfl
+                    INNER JOIN public."DocumentStatus" status
+                    ON status.id = rfl."statusId"
+                    WHERE rfl."officeId" = ${args.officeId};
+                    GROUP BY rfl."documentId", status.category;`;
             }
             else {
+                // admin statistics
                 statistics = yield data_client_1.default.$queryRaw `
-                    SELECT status.category, COUNT(*) FROM public."Documents" doc
+                    SELECT rfl."documentId", status.category, COUNT(*) 
+                    FROM public."Referrals" rfl
                     INNER JOIN public."DocumentStatus" status
-                    ON status.id = doc."statusId"
-                    GROUP BY status.category`;
+                    ON status.id = rfl."statusId"
+                    GROUP BY rfl."documentId", status.category;`;
             }
             return {
                 referred: statistics.reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
@@ -314,7 +334,7 @@ const resolvers = {
             });
         }),
         deleteDocumentStatus: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            const status = yield data_client_1.default.documents.aggregate({
+            const status = yield data_client_1.default.referrals.aggregate({
                 where: {
                     statusId: args.id
                 },
@@ -334,7 +354,7 @@ const resolvers = {
         }),
         // ============================== DOCUMENTS ===================================
         createDocument: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            const { subject, description, receivedFrom, typeId, purposeId, statusId, signatureId, tag, dateDue, refferedTo } = args;
+            const { subject, description, receivedFrom, typeId, purposeId, signatureId, tag, dateDue, referredTo } = args;
             // get current count
             const today = new Date();
             const document = yield data_client_1.default.documents.findFirst({
@@ -361,14 +381,14 @@ const resolvers = {
                 }
             });
             // trigger assigned document event
-            refferedTo.forEach(officeId => pubsub_1.default.publish(`OFFICE_${officeId.toString()}`, {
+            referredTo.forEach(ref => pubsub_1.default.publish(`OFFICE_${ref.officeId.toString()}`, {
                 officeEvents: {
                     eventName: `ASSIGNED_DOCUMENT_${referenceNum}`,
                     eventDate: new Date().toISOString()
                 }
             }));
             // send notification
-            refferedTo.forEach(officeId => (0, documents_1.sendNotification)(officeId, `Assigned Document ${referenceNum}`, subject));
+            referredTo.forEach(ref => (0, documents_1.sendNotification)(ref.officeId, `Assigned Document ${referenceNum}`, subject));
             // create new document
             return yield data_client_1.default.documents.create({
                 data: {
@@ -378,20 +398,19 @@ const resolvers = {
                     receivedFrom: receivedFrom,
                     typeId: typeId,
                     purposeId: purposeId,
-                    statusId: statusId,
                     signatureId: signatureId,
                     tag: tag,
                     dateDue: new Date(dateDue),
                     referrals: {
                         createMany: {
-                            data: refferedTo.map(id => ({ officeId: id }))
+                            data: referredTo
                         }
                     }
                 }
             });
         }),
         updateDocument: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            const { referenceNum, subject, description, receivedFrom, typeId, purposeId, signatureId, statusId, tag, dateDue, refferedTo } = args;
+            const { referenceNum, subject, description, receivedFrom, typeId, purposeId, signatureId, tag, dateDue, referredTo } = args;
             // remove former referrals 
             yield data_client_1.default.referrals.deleteMany({
                 where: {
@@ -413,7 +432,7 @@ const resolvers = {
                 }
             });
             // trigger reassigned document event
-            refferedTo.forEach(officeId => pubsub_1.default.publish(`OFFICE_${officeId.toString()}`, {
+            referredTo.forEach(ref => pubsub_1.default.publish(`OFFICE_${ref.officeId.toString()}`, {
                 officeEvents: {
                     eventName: `UPDATED_DOCUMENT_${referenceNum}`,
                     eventDate: new Date().toISOString()
@@ -429,33 +448,30 @@ const resolvers = {
                     receivedFrom: receivedFrom,
                     typeId: typeId,
                     purposeId: purposeId,
-                    statusId: statusId,
                     signatureId: signatureId,
                     tag: tag,
                     dateDue: new Date(dateDue),
                     referrals: {
                         createMany: {
-                            data: refferedTo.map(id => ({ officeId: id }))
+                            data: referredTo
                         }
                     }
                 }
             });
         }),
         documentUpdateStatus: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            const updated = yield data_client_1.default.documents.update({
+            const updated = yield data_client_1.default.referrals.update({
                 where: {
-                    referenceNum: args.referenceNum
+                    documentId_officeId: {
+                        documentId: args.referenceNum,
+                        officeId: args.officeId
+                    }
                 },
                 data: {
                     statusId: args.statusId
                 },
                 select: {
-                    status: true,
-                    referrals: {
-                        select: {
-                            officeId: true
-                        }
-                    }
+                    status: true
                 }
             });
             // trigger updated document event
@@ -472,13 +488,13 @@ const resolvers = {
                     eventDate: new Date().toISOString()
                 }
             });
-            // trigger reassigned document event
-            updated.referrals.forEach(office => pubsub_1.default.publish(`OFFICE_${office.officeId.toString()}`, {
+            // trigger updated document event
+            pubsub_1.default.publish(`OFFICE_${args.officeId.toString()}`, {
                 officeEvents: {
                     eventName: `UPDATED_DOCUMENT_${args.referenceNum}`,
                     eventDate: new Date().toISOString()
                 }
-            }));
+            });
             return updated.status;
         }),
         deleteDocument: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
@@ -512,7 +528,7 @@ const resolvers = {
             return deleted;
         }),
         createComment: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            const { senderId, documentId, message, files } = args;
+            const { senderId, documentId, message, files, level } = args;
             // trigger updated document event
             pubsub_1.default.publish(`DOCUMENT_${documentId}`, {
                 documentEvents: {
@@ -525,6 +541,7 @@ const resolvers = {
                     documentId: documentId,
                     senderId: senderId,
                     message: message,
+                    level: level,
                     files: files.join(';')
                 }
             });

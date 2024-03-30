@@ -175,15 +175,21 @@ const resolvers = {
                         dateDue: {
                             lt: new Date()
                         },
-                        status: {
-                            OR: [
-                                {
-                                    category: client_1.Status.ONGOING
-                                },
-                                {
-                                    category: client_1.Status.NOT_STARTED
-                                }
-                            ]
+                        referrals: {
+                            some: {
+                                OR: [
+                                    {
+                                        status: {
+                                            category: client_1.Status.ONGOING
+                                        }
+                                    },
+                                    {
+                                        status: {
+                                            category: client_1.Status.NOT_STARTED
+                                        }
+                                    }
+                                ]
+                            }
                         }
                     }
                 });
@@ -244,11 +250,20 @@ const resolvers = {
                 where: {
                     referrals: {
                         some: {
-                            officeId: officer.officeId
+                            officeId: officer.officeId,
+                            OR: [
+                                {
+                                    status: {
+                                        category: client_1.Status.ONGOING
+                                    }
+                                },
+                                {
+                                    status: {
+                                        category: client_1.Status.NOT_STARTED
+                                    }
+                                }
+                            ]
                         }
-                    },
-                    status: {
-                        category: client_1.Status.NOT_STARTED
                     }
                 }
             });

@@ -3,7 +3,9 @@ import {
     DocumentPurpose, 
     DocumentStatus, 
     DocumentTypes, 
-    Documents
+    Documents,
+    Referrals,
+    Role
 } from "@prisma/client";
 import dataClient from "../data-client";
 import pubsub from "../pubsub";
@@ -11,13 +13,18 @@ import { sendNotification } from "../routines/documents";
 import { GraphQLError } from "graphql";
 
 interface DocumentInput extends Documents {
-    refferedTo: number[]
+    referredTo: {
+        officeId: number;
+        statusId: number  | null;
+        assignedId: string | null;
+    }[]
 }
 
 interface CommentInput {
     documentId: string;
     senderId: string;
     message: string;
+    level: Role;
     files: string[]
 }
 
@@ -38,6 +45,36 @@ const resolvers = {
         id: (parent: DocumentPurpose) => {
             return parent.id.toString()
         }
+    },
+
+    Referrals: {
+        office: async (parent: Referrals) => {
+            return await dataClient.offices.findUnique({
+                where: {
+                    id: parent.officeId
+                }
+            })
+        },
+
+        status: async (parent: Referrals) => {
+            if (!parent.statusId) return null;
+
+            return await dataClient.documentStatus.findUnique({
+                where: {
+                    id: parent.statusId
+                }
+            })
+        },
+
+        assigned: async (parent: Referrals) => {
+            if (!parent.assignedId) return null;
+
+            return await dataClient.officers.findUnique({
+                where: {
+                    uuid: parent.assignedId
+                }
+            })
+        },
     },
 
     Documents: {
@@ -61,16 +98,6 @@ const resolvers = {
             })
         },
 
-        status: async (parent: Documents) => {
-            if (!parent.statusId) return null;
-
-            return await dataClient.documentStatus.findUnique({
-                where: {
-                    id: parent.statusId
-                }
-            })
-        },
-
         signatory: async (parent: Documents) => {
             if (!parent.signatureId) return null;
 
@@ -89,17 +116,14 @@ const resolvers = {
             return parent.dateDue.toISOString()
         },
 
-        refferedTo: async (parent: Documents) => {
+        referredTo: async (parent: Documents) => {
             const referrals = await dataClient.referrals.findMany({
                 where: {
                     documentId: parent.referenceNum
-                },
-                select: {
-                    office: true
                 }
-            })
+            });
 
-            return referrals.map(refer => refer.office);
+            return referrals;
         },
 
         comments: async (parent: Documents) => {
@@ -209,10 +233,11 @@ const resolvers = {
 
         getDocumentSummary: async () => {
             const summary: { officeId: BigInt, category: string, count: number }[] = await dataClient.$queryRaw`
-                SELECT rfl."officeId", sts.category, COUNT(*) FROM public."Documents" doc
-                INNER JOIN public."DocumentStatus" sts ON sts.id = doc."statusId"
-                INNER JOIN public."Referrals" rfl ON rfl."documentId" = doc."referenceNum"
-                GROUP BY rfl."officeId", sts.category`;
+                SELECT rfl."officeId", status.category, COUNT(*) 
+                FROM public."Referrals" rfl
+                INNER JOIN public."DocumentStatus" status
+                ON status.id = rfl."statusId"
+                GROUP BY rfl."officeId", status.category;`;
 
             const offices = await dataClient.offices.findMany();
 
@@ -226,21 +251,25 @@ const resolvers = {
         },
 
         getDocumentStatistics: async (_: unknown, args: { officeId?: number }) => {
-            let statistics: { category: string, count: BigInt }[];
+            let statistics: { documentId: string, category: string, count: BigInt }[];
 
             if (args.officeId) {
-                statistics = await dataClient.$queryRaw`SELECT status.category, COUNT(DISTINCT doc."referenceNum") FROM public."Documents" doc
-                INNER JOIN public."Referrals" rfl ON rfl."documentId" = doc."referenceNum"
-                INNER JOIN public."DocumentStatus" status
-                ON status.id = doc."statusId"
-                WHERE rfl."officeId" = ${args.officeId}
-                GROUP BY status.category`;
-            } else {
+                // statistics for each offices
                 statistics = await dataClient.$queryRaw`
-                    SELECT status.category, COUNT(*) FROM public."Documents" doc
+                    SELECT rfl."documentId", status.category, COUNT(*) 
+                    FROM public."Referrals" rfl
                     INNER JOIN public."DocumentStatus" status
-                    ON status.id = doc."statusId"
-                    GROUP BY status.category`;
+                    ON status.id = rfl."statusId"
+                    WHERE rfl."officeId" = ${args.officeId};
+                    GROUP BY rfl."documentId", status.category;`;
+            } else {
+                // admin statistics
+                statistics = await dataClient.$queryRaw`
+                    SELECT rfl."documentId", status.category, COUNT(*) 
+                    FROM public."Referrals" rfl
+                    INNER JOIN public."DocumentStatus" status
+                    ON status.id = rfl."statusId"
+                    GROUP BY rfl."documentId", status.category;`;
             }
 
             return {
@@ -361,7 +390,7 @@ const resolvers = {
         },
 
         deleteDocumentStatus: async (_: unknown, args: DocumentStatus) => {
-            const status = await dataClient.documents.aggregate({
+            const status = await dataClient.referrals.aggregate({
                 where: {
                     statusId: args.id
                 },
@@ -384,7 +413,7 @@ const resolvers = {
         // ============================== DOCUMENTS ===================================
 
         createDocument: async (_: unknown, args: DocumentInput) => {
-            const { subject, description, receivedFrom, typeId, purposeId, statusId, signatureId, tag, dateDue, refferedTo } = args;
+            const { subject, description, receivedFrom, typeId, purposeId, signatureId, tag, dateDue, referredTo } = args;
 
             // get current count
             const today = new Date();
@@ -415,7 +444,7 @@ const resolvers = {
             });
 
             // trigger assigned document event
-            refferedTo.forEach(officeId => pubsub.publish(`OFFICE_${officeId.toString()}`, {
+            referredTo.forEach(ref => pubsub.publish(`OFFICE_${ref.officeId.toString()}`, {
                 officeEvents: {
                     eventName: `ASSIGNED_DOCUMENT_${referenceNum}`,
                     eventDate: new Date().toISOString()
@@ -423,7 +452,7 @@ const resolvers = {
             }));
 
             // send notification
-            refferedTo.forEach(officeId => sendNotification(officeId, `Assigned Document ${referenceNum}`, subject));
+            referredTo.forEach(ref => sendNotification(ref.officeId, `Assigned Document ${referenceNum}`, subject));
 
             // create new document
             return await dataClient.documents.create({
@@ -434,13 +463,12 @@ const resolvers = {
                     receivedFrom: receivedFrom,
                     typeId: typeId,
                     purposeId: purposeId,
-                    statusId: statusId,
                     signatureId: signatureId,
                     tag: tag,
                     dateDue: new Date(dateDue),
                     referrals: {
                         createMany: {
-                            data: refferedTo.map(id => ({ officeId: id }))
+                            data: referredTo
                         }
                     }
                 }
@@ -448,7 +476,7 @@ const resolvers = {
         },
 
         updateDocument: async (_: unknown, args: DocumentInput) => {
-            const { referenceNum, subject, description, receivedFrom, typeId, purposeId, signatureId, statusId, tag, dateDue, refferedTo } = args;
+            const { referenceNum, subject, description, receivedFrom, typeId, purposeId, signatureId, tag, dateDue, referredTo } = args;
 
             // remove former referrals 
             await dataClient.referrals.deleteMany({
@@ -474,7 +502,7 @@ const resolvers = {
             });
 
             // trigger reassigned document event
-            refferedTo.forEach(officeId => pubsub.publish(`OFFICE_${officeId.toString()}`, {
+            referredTo.forEach(ref => pubsub.publish(`OFFICE_${ref.officeId.toString()}`, {
                 officeEvents: {
                     eventName: `UPDATED_DOCUMENT_${referenceNum}`,
                     eventDate: new Date().toISOString()
@@ -491,34 +519,31 @@ const resolvers = {
                     receivedFrom: receivedFrom,
                     typeId: typeId,
                     purposeId: purposeId,
-                    statusId: statusId,
                     signatureId: signatureId,
                     tag: tag,
                     dateDue: new Date(dateDue),
                     referrals: {
                         createMany: {
-                            data: refferedTo.map(id => ({ officeId: id }))
+                            data: referredTo
                         }
                     }
                 }
             });
         },
 
-        documentUpdateStatus: async (_: unknown, args: DocumentInput) => {
-            const updated = await dataClient.documents.update({
+        documentUpdateStatus: async (_: unknown, args: { referenceNum: string, officeId: number, statusId: number }) => {
+            const updated = await dataClient.referrals.update({
                 where: {
-                    referenceNum: args.referenceNum
+                    documentId_officeId: {
+                        documentId: args.referenceNum,
+                        officeId: args.officeId
+                    }
                 },
                 data: {
                     statusId: args.statusId
                 },
                 select: {
-                    status: true,
-                    referrals: {
-                        select: {
-                            officeId: true
-                        }
-                    }
+                    status: true
                 }
             });
 
@@ -538,13 +563,13 @@ const resolvers = {
                 }
             });
 
-            // trigger reassigned document event
-            updated.referrals.forEach(office => pubsub.publish(`OFFICE_${office.officeId.toString()}`, {
+            // trigger updated document event
+            pubsub.publish(`OFFICE_${args.officeId.toString()}`, {
                 officeEvents: {
                     eventName: `UPDATED_DOCUMENT_${args.referenceNum}`,
                     eventDate: new Date().toISOString()
                 }
-            }));
+            })
 
             return updated.status
         },
@@ -585,7 +610,7 @@ const resolvers = {
         },
 
         createComment: async (_: unknown, args: CommentInput) => {
-            const { senderId, documentId, message, files } = args;
+            const { senderId, documentId, message, files, level } = args;
 
             // trigger updated document event
             pubsub.publish(`DOCUMENT_${documentId}`, {
@@ -600,6 +625,7 @@ const resolvers = {
                     documentId: documentId,
                     senderId: senderId,
                     message: message,
+                    level: level,
                     files: files.join(';')
                 }
             });

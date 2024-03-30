@@ -45,6 +45,18 @@ const schema = gql`
         noaction: Int!
     }
 
+    type Referrals {
+        office: Offices!
+        status: DocumentStatus
+        assigned: Officers
+    }
+
+    input ReferralInput {
+        officeId: Int!
+        statusId: Int
+        assignedId: String
+    }
+
     type Documents {
         referenceNum: String!
         subject: String!
@@ -52,14 +64,12 @@ const schema = gql`
         receivedFrom: String!
         type: DocumentTypes
         purpose: DocumentPurpose
-        status: DocumentStatus
         tag: Tags
         dateCreated: String!
         dateDue: String!
         signatory: Officers!
-        refferedTo: [Offices!]!
+        referredTo: [Referrals!]!
         comments: [Comments!]!
-        
     }
 
     type Comments {
@@ -67,6 +77,7 @@ const schema = gql`
         message: String!
         files: [String!]
         sender: Officers!
+        level: Role!
         dateCreated: String!
     }
 
@@ -105,11 +116,10 @@ const schema = gql`
             receivedFrom: String!
             typeId: Int!
             purposeId: Int!
-            statusId: Int!
             tag: Tags
             dateDue: String!
             signatureId: String!
-            refferedTo: [Int!]!
+            referredTo: [ReferralInput!]!
         ): Documents!
 
         updateDocument(
@@ -119,17 +129,16 @@ const schema = gql`
             receivedFrom: String
             typeId: Int
             purposeId: Int
-            statusId: Int
             tag: Tags
             dateDue: String
             signatureId: String!
-            refferedTo: [Int]
+            referredTo: [ReferralInput]
         ): Documents!
 
-        documentUpdateStatus(referenceNum: String!, statusId: Int!): DocumentStatus!
+        documentUpdateStatus(referenceNum: String!, officeId: Int!, statusId: Int!): DocumentStatus!
         deleteDocument(referenceNum: String!): Documents!
 
-        createComment(documentId: String!, senderId: String!, message: String!, files: [String!]): Comments!
+        createComment(documentId: String!, senderId: String!, message: String!, level: Role!, files: [String!]): Comments!
     }
 
     extend type Subscription {

@@ -187,15 +187,21 @@ const resolvers = {
                         dateDue: {
                             lt: new Date()
                         },
-                        status: {
-                            OR: [
-                                {
-                                    category: Status.ONGOING
-                                },
-                                {
-                                    category: Status.NOT_STARTED
-                                }
-                            ]
+                        referrals: {
+                            some: {
+                                OR: [
+                                    {
+                                        status: {
+                                            category: Status.ONGOING
+                                        }
+                                    },
+                                    {
+                                        status: {
+                                            category: Status.NOT_STARTED
+                                        }
+                                    }
+                                ]
+                            }
                         }
                     }
                 });
@@ -261,11 +267,20 @@ const resolvers = {
                 where: {
                     referrals: {
                         some: {
-                            officeId: officer.officeId
+                            officeId: officer.officeId,
+                            OR: [
+                                {
+                                    status: {
+                                        category: Status.ONGOING
+                                    }
+                                },
+                                {
+                                    status: {
+                                        category: Status.NOT_STARTED
+                                    }
+                                }
+                            ]
                         }
-                    },
-                    status: {
-                        category: Status.NOT_STARTED
                     }
                 }
             });

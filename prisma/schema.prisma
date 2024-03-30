@@ -53,6 +53,7 @@ model Officers {
   trails      AuditTrail[]
   comments    Comments[]
   signed      Documents[]
+  assigned    Referrals[]
 
   @@unique([firstName, lastName])
 }
@@ -68,7 +69,7 @@ model DocumentStatus {
   id          BigInt        @id @default(autoincrement())
   label       String        @db.VarChar(50)
   category    Status
-  documents   Documents[]
+  documents   Referrals[]
 }
 
 model DocumentTypes {
@@ -90,14 +91,12 @@ model Documents {
   receivedFrom      String             @db.VarChar(100)
   typeId            BigInt?
   purposeId         BigInt?
-  statusId          BigInt? 
   signatureId       String?            @db.Uuid
   dateCreated       DateTime           @db.Timestamp(3) @default(now())
   dateDue           DateTime
   tag               String?            @db.VarChar(20)
   type              DocumentTypes?     @relation(fields: [typeId], references: [id], onDelete: SetNull)
   purpose           DocumentPurpose?   @relation(fields: [purposeId], references: [id], onDelete: SetNull)
-  status            DocumentStatus?    @relation(fields: [statusId], references: [id], onDelete: SetNull)
   signatory         Officers?          @relation(fields: [signatureId], references: [uuid], onDelete: SetNull)
   referrals         Referrals[]
   comments          Comments[]
@@ -107,8 +106,12 @@ model Documents {
 model Referrals {
   documentId        String             @db.VarChar(50)
   officeId          BigInt
+  statusId          BigInt?
+  assignedId        String?            @db.Uuid
   document          Documents          @relation(fields: [documentId], references: [referenceNum], onDelete: Cascade)
+  status            DocumentStatus?    @relation(fields: [statusId], references: [id], onDelete: SetNull)
   office            Offices            @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  assigned          Officers?          @relation(fields: [assignedId], references: [uuid], onDelete: SetNull)
 
   @@id([documentId, officeId])
 }
@@ -129,6 +132,7 @@ model Comments {
   files         String      @db.Text
   documentId    String      @db.VarChar(50)
   senderId      String      @db.Uuid
+  level         Role
   dateCreated   DateTime    @db.Timestamp(3) @default(now())
   document      Documents   @relation(fields: [documentId], references: [referenceNum], onDelete: Cascade)
   sender        Officers    @relation(fields: [senderId], references: [uuid], onDelete: Cascade)
