@@ -33,18 +33,18 @@ function autoGenerateReports() {
         const reports = yield data_client_1.default.reports.findMany({
             where: {
                 nationalDue: {
-                    lt: new Date()
+                    lt: new Date(),
                 },
                 frequency: {
-                    not: "NONE"
-                }
-            }
+                    not: "NONE",
+                },
+            },
         });
         // get report offices
         const offices = yield data_client_1.default.offices.findMany({
             select: {
-                id: true
-            }
+                id: true,
+            },
         });
         for (let i = 0; i < reports.length; i++) {
             const report = reports[i];
@@ -59,25 +59,25 @@ function autoGenerateReports() {
                         officeId: office.id,
                         localDue: nextLocalDeadline,
                         nationalDue: nextNationalDeadline,
-                        status: client_1.Status.ONGOING
-                    }
+                        status: client_1.Status.REFERRED,
+                    },
                 });
                 // update report next due date
                 yield data_client_1.default.reports.update({
                     where: {
-                        id: report.id
+                        id: report.id,
                     },
                     data: {
                         localDue: nextLocalDeadline,
-                        nationalDue: nextNationalDeadline
-                    }
+                        nationalDue: nextNationalDeadline,
+                    },
                 });
                 // trigger create report event
                 pubsub_1.default.publish(`OFFICE_${office.id.toString()}`, {
                     officeEvents: {
                         eventName: `CREATED_REPORT_${report.name}`,
-                        eventDate: new Date().toISOString()
-                    }
+                        eventDate: new Date().toISOString(),
+                    },
                 });
             }
         }

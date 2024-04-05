@@ -19,11 +19,11 @@ function subscribeUser(uuid, subscription) {
         const payload = JSON.stringify(subscription);
         yield data_client_1.default.officers.update({
             where: {
-                uuid: uuid
+                uuid: uuid,
             },
             data: {
-                device: payload
-            }
+                device: payload,
+            },
         });
     });
 }

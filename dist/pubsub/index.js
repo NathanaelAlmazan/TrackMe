@@ -9,11 +9,11 @@ const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
 const options = {
     host: process.env.REDIS_HOST,
-    port: parseInt(process.env.REDIS_PORT)
+    port: parseInt(process.env.REDIS_PORT),
 };
 const pubsub = new graphql_redis_subscriptions_1.RedisPubSub({
     publisher: new ioredis_1.default(options),
-    subscriber: new ioredis_1.default(options)
+    subscriber: new ioredis_1.default(options),
 });
 exports.default = pubsub;
 //# sourceMappingURL=index.js.map

@@ -39,7 +39,7 @@ const resolvers = {
         },
         nationalDue: (parent) => {
             return new Date(parent.nationalDue).toISOString();
-        }
+        },
     },
     SubmittedReports: {
         id: (parent) => {
@@ -48,15 +48,15 @@ const resolvers = {
         report: (parent) => __awaiter(void 0, void 0, void 0, function* () {
             return yield data_client_1.default.reports.findUnique({
                 where: {
-                    id: parent.reportId
-                }
+                    id: parent.reportId,
+                },
             });
         }),
         office: (parent) => __awaiter(void 0, void 0, void 0, function* () {
             return yield data_client_1.default.offices.findUnique({
                 where: {
-                    id: parent.officeId
-                }
+                    id: parent.officeId,
+                },
             });
         }),
         localDue: (parent) => {
@@ -78,34 +78,34 @@ const resolvers = {
                     reportId: parent.reportId,
                     localDue: parent.localDue,
                     nationalDue: parent.nationalDue,
-                    status: client_1.Status.ONGOING
+                    status: client_1.Status.REFERRED,
                 },
-                _count: true
+                _count: true,
             });
             return pending._count;
-        })
+        }),
     },
     Query: {
         getReports: () => __awaiter(void 0, void 0, void 0, function* () {
             return yield data_client_1.default.reports.findMany({
                 orderBy: {
-                    name: 'asc'
-                }
+                    name: "asc",
+                },
             });
         }),
         getReportById: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             const submitted = yield data_client_1.default.submittedReports.findUnique({
                 where: {
-                    id: args.id
+                    id: args.id,
                 },
                 include: {
-                    report: true
-                }
+                    report: true,
+                },
             });
             if (!submitted)
-                throw new graphql_1.GraphQLError('Report does not exist', {
+                throw new graphql_1.GraphQLError("Report does not exist", {
                     extensions: {
-                        code: 'BAD_USER_INPUT',
+                        code: "BAD_USER_INPUT",
                     },
                 });
             return Object.assign(Object.assign({}, submitted.report), { localDue: submitted.localDue, nationalDue: submitted.nationalDue });
@@ -114,100 +114,106 @@ const resolvers = {
             if (args.officeId)
                 return yield data_client_1.default.submittedReports.findMany({
                     where: {
-                        officeId: args.officeId
+                        officeId: args.officeId,
                     },
                     orderBy: {
-                        dateCreated: 'desc'
-                    }
+                        dateCreated: "desc",
+                    },
                 });
             return data_client_1.default.$queryRaw `SELECT DISTINCT ON ("reportId", "localDue", "nationalDue") * FROM public."SubmittedReports"`;
         }),
         getSubmittedReportById: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             return yield data_client_1.default.submittedReports.findUnique({
                 where: {
-                    id: args.id
-                }
+                    id: args.id,
+                },
             });
         }),
         getOfficeSubmissions: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             const report = yield data_client_1.default.submittedReports.findUnique({
                 where: {
-                    id: args.id
-                }
+                    id: args.id,
+                },
             });
             if (!report)
-                throw new graphql_1.GraphQLError('Report does not exist', {
+                throw new graphql_1.GraphQLError("Report does not exist", {
                     extensions: {
-                        code: 'BAD_USER_INPUT',
+                        code: "BAD_USER_INPUT",
                     },
                 });
             return yield data_client_1.default.submittedReports.findMany({
                 where: {
                     reportId: report.reportId,
                     localDue: report.localDue,
-                    nationalDue: report.nationalDue
+                    nationalDue: report.nationalDue,
                 },
                 orderBy: {
-                    dateCreated: 'desc'
-                }
+                    dateCreated: "desc",
+                },
             });
         }),
         getReportSummary: () => __awaiter(void 0, void 0, void 0, function* () {
             const summary = yield data_client_1.default.submittedReports.groupBy({
-                by: ['officeId', 'status'],
+                by: ["officeId", "status"],
                 _count: {
-                    _all: true
-                }
+                    _all: true,
+                },
             });
             const offices = yield data_client_1.default.offices.findMany();
-            return offices.map(office => ({
+            return offices.map((office) => ({
                 office: office.name,
-                total: summary.filter(stat => stat.officeId === office.id).reduce((sum, stat) => sum + parseInt(stat._count._all.toString()), 0),
-                submitted: summary.filter(stat => stat.officeId === office.id && stat.status === "FINISHED").reduce((sum, stat) => sum + parseInt(stat._count._all.toString()), 0),
-                pending: summary.filter(stat => stat.officeId === office.id && stat.status === "ONGOING").reduce((sum, stat) => sum + parseInt(stat._count._all.toString()), 0)
+                total: summary
+                    .filter((stat) => stat.officeId === office.id)
+                    .reduce((sum, stat) => sum + parseInt(stat._count._all.toString()), 0),
+                submitted: summary
+                    .filter((stat) => stat.officeId === office.id && stat.status === "FINISHED")
+                    .reduce((sum, stat) => sum + parseInt(stat._count._all.toString()), 0),
+                pending: summary
+                    .filter((stat) => stat.officeId === office.id && stat.status === "REFERRED")
+                    .reduce((sum, stat) => sum + parseInt(stat._count._all.toString()), 0),
             }));
         }),
         getReportStatistics: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             var _a, _b;
             const statistics = yield data_client_1.default.submittedReports.groupBy({
-                by: ['status'],
+                by: ["status"],
                 where: {
-                    officeId: args.officeId
+                    officeId: args.officeId,
                 },
                 _count: {
-                    _all: true
-                }
+                    _all: true,
+                },
             });
             const overdue = yield data_client_1.default.submittedReports.aggregate({
                 where: {
                     OR: [
                         {
                             localDue: {
-                                lt: new Date()
-                            }
+                                lt: new Date(),
+                            },
                         },
                         {
                             nationalDue: {
-                                lt: new Date()
-                            }
-                        }
+                                lt: new Date(),
+                            },
+                        },
                     ],
-                    status: client_1.Status.ONGOING,
-                    officeId: args.officeId
+                    status: client_1.Status.REFERRED,
+                    officeId: args.officeId,
                 },
                 _count: {
-                    _all: true
-                }
+                    _all: true,
+                },
             });
             return {
                 total: statistics.reduce((total, report) => total + report._count._all, 0),
-                submitted: ((_a = statistics.find(stats => stats.status === client_1.Status.FINISHED)) === null || _a === void 0 ? void 0 : _a._count._all) || 0,
-                pending: ((_b = statistics.find(stats => stats.status === client_1.Status.ONGOING)) === null || _b === void 0 ? void 0 : _b._count._all) || 0,
-                overdue: overdue._count._all
+                submitted: ((_a = statistics.find((stats) => stats.status === client_1.Status.FINISHED)) === null || _a === void 0 ? void 0 : _a._count._all) || 0,
+                pending: ((_b = statistics.find((stats) => stats.status === client_1.Status.REFERRED)) === null || _b === void 0 ? void 0 : _b._count._all) || 0,
+                overdue: overdue._count._all,
             };
         }),
         getEvents: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            const today = new Date(args.date).toISOString().split('T')[0];
+            const today = new Date(args.date).toISOString().split("T")[0];
             // get events
             const events = yield data_client_1.default.$queryRaw `SELECT *
                             FROM public."Events"
@@ -257,29 +263,33 @@ const resolvers = {
             if (args.officeId) {
                 const office = yield data_client_1.default.offices.findUnique({
                     where: {
-                        id: args.officeId
+                        id: args.officeId,
                     },
                     include: {
                         referrals: {
                             select: {
-                                documentId: true
-                            }
-                        }
-                    }
+                                documentId: true,
+                            },
+                        },
+                    },
                 });
                 if (office)
-                    assigned = office.referrals.map(ref => ref.documentId);
+                    assigned = office.referrals.map((ref) => ref.documentId);
             }
-            return events.map(event => ({
+            return events
+                .map((event) => ({
                 id: event.id.toString(),
                 subject: event.subject,
                 description: event.description,
                 image: event.image,
                 date: new Date(event.date).toISOString(),
-                dateDue: '',
+                dateDue: "",
                 frequency: event.frequency,
-                type: "EVENT"
-            })).concat(reports.filter(report => !submissions.find(sub => sub.reportId === report.id)).map(report => ({
+                type: "EVENT",
+            }))
+                .concat(reports
+                .filter((report) => !submissions.find((sub) => sub.reportId === report.id))
+                .map((report) => ({
                 id: report.name,
                 subject: report.name,
                 description: report.basis,
@@ -287,17 +297,21 @@ const resolvers = {
                 date: new Date(report.localDue).toISOString(),
                 dateDue: new Date(report.nationalDue).toISOString(),
                 frequency: report.frequency,
-                type: report.type === 'HR' ? "HR_REPORT" : "ADMIN_REPORT"
-            }))).concat(documents.filter(document => assigned.includes(document.referenceNum) || !args.officeId).map(document => ({
+                type: report.type === "HR" ? "HR_REPORT" : "ADMIN_REPORT",
+            })))
+                .concat(documents
+                .filter((document) => assigned.includes(document.referenceNum) || !args.officeId)
+                .map((document) => ({
                 id: document.referenceNum,
                 subject: document.referenceNum,
                 description: document.subject,
                 image: null,
                 date: new Date(document.dateDue).toISOString(),
-                dateDue: '',
+                dateDue: "",
                 frequency: "NONE",
-                type: "DOCUMENT"
-            }))).concat(submissions.map(submit => ({
+                type: "DOCUMENT",
+            })))
+                .concat(submissions.map((submit) => ({
                 id: submit.id.toString(),
                 subject: submit.name,
                 description: submit.basis,
@@ -305,16 +319,16 @@ const resolvers = {
                 date: new Date(submit.localDue).toISOString(),
                 dateDue: new Date(submit.nationalDue).toISOString(),
                 frequency: "NONE",
-                type: submit.type === 'HR' ? "HR_REPORT" : "ADMIN_REPORT"
+                type: submit.type === "HR" ? "HR_REPORT" : "ADMIN_REPORT",
             })));
         }),
         getEventById: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             return yield data_client_1.default.events.findUnique({
                 where: {
-                    id: args.id
-                }
+                    id: args.id,
+                },
             });
-        })
+        }),
     },
     Mutation: {
         // ============================== EVENTS ===================================
@@ -325,29 +339,29 @@ const resolvers = {
                     description: args.description,
                     image: args.image,
                     date: args.date,
-                    frequency: args.frequency
-                }
+                    frequency: args.frequency,
+                },
             });
         }),
         updateEvent: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             return yield data_client_1.default.events.update({
                 where: {
-                    id: args.id
+                    id: args.id,
                 },
                 data: {
                     subject: args.subject,
                     description: args.description,
                     image: args.image,
                     date: args.date,
-                    frequency: args.frequency
-                }
+                    frequency: args.frequency,
+                },
             });
         }),
         deleteEvent: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             return yield data_client_1.default.events.delete({
                 where: {
-                    id: args.id
-                }
+                    id: args.id,
+                },
             });
         }),
         // ============================== REPORTS ===================================
@@ -359,19 +373,19 @@ const resolvers = {
                     localDue: new Date(args.localDue),
                     nationalDue: new Date(args.nationalDue),
                     frequency: args.frequency,
-                    type: args.type
-                }
+                    type: args.type,
+                },
             });
             const offices = yield data_client_1.default.offices.findMany({
                 select: {
-                    id: true
-                }
+                    id: true,
+                },
             });
-            pubsub_1.default.publish('OFFICE_ADMIN', {
+            pubsub_1.default.publish("OFFICE_ADMIN", {
                 officeEvents: {
                     eventName: `CREATED_REPORT_${report.name}`,
-                    eventDate: new Date().toISOString()
-                }
+                    eventDate: new Date().toISOString(),
+                },
             });
             for (let i = 0; i < offices.length; i++) {
                 const office = offices[i];
@@ -381,15 +395,15 @@ const resolvers = {
                         officeId: office.id,
                         localDue: new Date(args.localDue),
                         nationalDue: new Date(args.nationalDue),
-                        status: client_1.Status.ONGOING
-                    }
+                        status: client_1.Status.REFERRED,
+                    },
                 });
                 // trigger create report event
                 pubsub_1.default.publish(`OFFICE_${office.id.toString()}`, {
                     officeEvents: {
                         eventName: `CREATED_REPORT_${report.name}`,
-                        eventDate: new Date().toISOString()
-                    }
+                        eventDate: new Date().toISOString(),
+                    },
                 });
             }
             return report;
@@ -398,56 +412,56 @@ const resolvers = {
             // get current report deadline
             const report = yield data_client_1.default.submittedReports.findUnique({
                 where: {
-                    id: args.id
+                    id: args.id,
                 },
                 select: {
                     reportId: true,
                     localDue: true,
-                    nationalDue: true
-                }
+                    nationalDue: true,
+                },
             });
             if (!report)
-                throw new graphql_1.GraphQLError('Report does not exist', {
+                throw new graphql_1.GraphQLError("Report does not exist", {
                     extensions: {
-                        code: 'BAD_USER_INPUT',
+                        code: "BAD_USER_INPUT",
                     },
                 });
             // update report deadline
             const updated = yield data_client_1.default.reports.update({
                 where: {
-                    id: report.reportId
+                    id: report.reportId,
                 },
                 data: {
                     name: args.name,
                     basis: args.basis,
                     frequency: args.frequency,
-                    type: args.type
+                    type: args.type,
                 },
                 include: {
                     submitted: {
                         select: {
-                            officeId: true
-                        }
-                    }
-                }
+                            officeId: true,
+                        },
+                    },
+                },
             });
             // update latest report submissions
             yield data_client_1.default.submittedReports.updateMany({
                 where: {
                     localDue: report.localDue,
-                    nationalDue: report.nationalDue
+                    nationalDue: report.nationalDue,
                 },
                 data: {
                     localDue: new Date(args.localDue),
                     nationalDue: new Date(args.nationalDue),
-                }
+                },
             });
             // trigger update report event
-            pubsub_1.default.publish('OFFICE_ADMIN', {
+            pubsub_1.default.publish("OFFICE_ADMIN", {
                 officeEvents: {
                     eventName: `UPDATED_REPORT_${updated.name}`,
-                    eventDate: new Date().toISOString()
-                }
+                    eventDate: new Date().toISOString(),
+                },
             });
             for (let i = 0; i < updated.submitted.length; i++) {
                 const office = updated.submitted[i];
@@ -455,8 +469,8 @@ const resolvers = {
                 pubsub_1.default.publish(`OFFICE_${office.officeId.toString()}`, {
                     officeEvents: {
                         eventName: `UPDATED_REPORT_${updated.name}`,
-                        eventDate: new Date().toISOString()
-                    }
+                        eventDate: new Date().toISOString(),
+                    },
                 });
             }
             return updated;
@@ -464,21 +478,21 @@ const resolvers = {
         deleteReport: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             const deleted = yield data_client_1.default.reports.delete({
                 where: {
-                    id: args.id
+                    id: args.id,
                 },
                 include: {
                     submitted: {
                         select: {
-                            officeId: true
-                        }
-                    }
-                }
+                            officeId: true,
+                        },
+                    },
+                },
             });
-            pubsub_1.default.publish('OFFICE_ADMIN', {
+            pubsub_1.default.publish("OFFICE_ADMIN", {
                 officeEvents: {
                     eventName: `DELETED_REPORT_${deleted.name}`,
-                    eventDate: new Date().toISOString()
-                }
+                    eventDate: new Date().toISOString(),
+                },
             });
             for (let i = 0; i < deleted.submitted.length; i++) {
                 const office = deleted.submitted[i];
@@ -486,8 +500,8 @@ const resolvers = {
                 pubsub_1.default.publish(`OFFICE_${office.officeId.toString()}`, {
                     officeEvents: {
                         eventName: `DELETED_REPORT_${deleted.name}`,
-                        eventDate: new Date().toISOString()
-                    }
+                        eventDate: new Date().toISOString(),
+                    },
                 });
             }
             return deleted;
@@ -495,37 +509,37 @@ const resolvers = {
         submitReport: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             const submitted = yield data_client_1.default.submittedReports.update({
                 where: {
-                    id: args.id
+                    id: args.id,
                 },
                 data: {
                     status: "FINISHED",
                     message: args.message,
-                    files: args.files.join(';')
+                    files: args.files.join(";"),
                 },
                 include: {
                     report: {
                         select: {
-                            name: true
-                        }
+                            name: true,
+                        },
                     },
                     office: {
                         select: {
-                            id: true
-                        }
-                    }
-                }
+                            id: true,
+                        },
+                    },
+                },
             });
-            pubsub_1.default.publish('OFFICE_ADMIN', {
+            pubsub_1.default.publish("OFFICE_ADMIN", {
                 officeEvents: {
                     eventName: `SUBMITTED_REPORT_${submitted.report.name}`,
-                    eventDate: new Date().toISOString()
-                }
+                    eventDate: new Date().toISOString(),
+                },
             });
             pubsub_1.default.publish(`OFFICE_${submitted.office.id.toString()}`, {
                 officeEvents: {
                     eventName: `SUBMITTED_REPORT_${submitted.report.name}`,
-                    eventDate: new Date().toISOString()
-                }
+                    eventDate: new Date().toISOString(),
+                },
             });
             return submitted;
         }),
@@ -533,25 +547,25 @@ const resolvers = {
         createSubmission: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             const report = yield data_client_1.default.reports.findUnique({
                 where: {
-                    id: args.reportId
-                }
+                    id: args.reportId,
+                },
             });
             if (!report)
-                throw new graphql_1.GraphQLError('Report does not exist', {
+                throw new graphql_1.GraphQLError("Report does not exist", {
                     extensions: {
-                        code: 'BAD_USER_INPUT',
+                        code: "BAD_USER_INPUT",
                     },
                 });
             const offices = yield data_client_1.default.offices.findMany({
                 select: {
-                    id: true
-                }
+                    id: true,
+                },
             });
-            pubsub_1.default.publish('OFFICE_ADMIN', {
+            pubsub_1.default.publish("OFFICE_ADMIN", {
                 officeEvents: {
                     eventName: `CREATED_REPORT_${report.name}`,
-                    eventDate: new Date().toISOString()
-                }
+                    eventDate: new Date().toISOString(),
+                },
             });
             for (let i = 0; i < offices.length; i++) {
                 const office = offices[i];
@@ -561,15 +575,15 @@ const resolvers = {
                         officeId: office.id,
                         localDue: new Date(args.localDue),
                         nationalDue: new Date(args.nationalDue),
-                        status: client_1.Status.ONGOING
-                    }
+                        status: client_1.Status.REFERRED,
+                    },
                 });
                 // trigger create report event
                 pubsub_1.default.publish(`OFFICE_${office.id.toString()}`, {
                     officeEvents: {
                         eventName: `CREATED_REPORT_${report.name}`,
-                        eventDate: new Date().toISOString()
-                    }
+                        eventDate: new Date().toISOString(),
+                    },
                 });
             }
             return report;
@@ -577,18 +591,18 @@ const resolvers = {
         deleteSubmission: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             const submission = yield data_client_1.default.submittedReports.findUnique({
                 where: {
-                    id: args.id
-                }
+                    id: args.id,
+                },
             });
             yield data_client_1.default.submittedReports.deleteMany({
                 where: {
                     reportId: submission === null || submission === void 0 ? void 0 : submission.reportId,
                     localDue: submission === null || submission === void 0 ? void 0 : submission.localDue,
-                    nationalDue: submission === null || submission === void 0 ? void 0 : submission.nationalDue
-                }
+                    nationalDue: submission === null || submission === void 0 ? void 0 : submission.nationalDue,
+                },
             });
             return submission;
-        })
+        }),
     },
 };
 exports.default = resolvers;

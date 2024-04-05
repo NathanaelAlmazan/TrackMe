@@ -50,17 +50,17 @@ model Officers {
   avatar      String        @db.Text @default("/assets/images/avatars/avatar_30.jpg")
   position    Positions?    @relation(fields: [positionId], references: [id], onDelete: SetNull)
   office      Offices?      @relation(fields: [officeId], references: [id], onDelete: SetNull)
-  trails      AuditTrail[]
-  comments    Comments[]
   signed      Documents[]
-  assigned    Referrals[]
+  assigned    Assigned[]
 
   @@unique([firstName, lastName])
 }
 
 enum Status {
-  NOT_STARTED
-  ONGOING
+  REFERRED
+  ASSIGNED
+  PROCESSED
+  SUBMITTED
   FINISHED
   NOT_ACTIONABLE
 }
@@ -99,43 +99,44 @@ model Documents {
   purpose           DocumentPurpose?   @relation(fields: [purposeId], references: [id], onDelete: SetNull)
   signatory         Officers?          @relation(fields: [signatureId], references: [uuid], onDelete: SetNull)
   referrals         Referrals[]
+  assigned          Assigned[]
   comments          Comments[]
-  trails            AuditTrail[]
 }
 
 model Referrals {
-  documentId        String             @db.VarChar(50)
   officeId          BigInt
+  documentId        String             @db.VarChar(50)
   statusId          BigInt?
-  assignedId        String?            @db.Uuid
   document          Documents          @relation(fields: [documentId], references: [referenceNum], onDelete: Cascade)
   status            DocumentStatus?    @relation(fields: [statusId], references: [id], onDelete: SetNull)
   office            Offices            @relation(fields: [officeId], references: [id], onDelete: Cascade)
-  assigned          Officers?          @relation(fields: [assignedId], references: [uuid], onDelete: SetNull)
 
-  @@id([documentId, officeId])
+  @@id([officeId, documentId])
 }
 
-model AuditTrail {
-  id            BigInt      @id @default(autoincrement())     
-  action        String      @db.VarChar(100)
-  officerId     String      @db.Uuid
-  documentId    String      @db.VarChar(50)
-  dateCreated   DateTime    @db.Timestamp(3) @default(now())
-  officer       Officers    @relation(fields: [officerId], references: [uuid], onDelete: Cascade)
-  document      Documents   @relation(fields: [documentId], references: [referenceNum], onDelete: Cascade)
+enum Assignment {
+  APPROVER
+  MEMBER
+}
+
+model Assigned {
+  officerId         String             @db.Uuid
+  documentId        String             @db.VarChar(50)
+  assignment        Assignment         @default(MEMBER)
+  officer           Officers           @relation(fields: [officerId], references: [uuid], onDelete: Cascade)
+  document          Documents          @relation(fields: [documentId], references: [referenceNum], onDelete: Cascade)
+
+  @@id([officerId, documentId])
 }
 
 model Comments {
-  id            BigInt      @id @default(autoincrement())   
-  message       String      @db.Text
-  files         String      @db.Text
-  documentId    String      @db.VarChar(50)
-  senderId      String      @db.Uuid
-  level         Role
-  dateCreated   DateTime    @db.Timestamp(3) @default(now())
-  document      Documents   @relation(fields: [documentId], references: [referenceNum], onDelete: Cascade)
-  sender        Officers    @relation(fields: [senderId], references: [uuid], onDelete: Cascade)
+  id               BigInt             @id @default(autoincrement())
+  documentId       String             @db.VarChar(50)
+  sender           String             @db.Uuid
+  recipient        String             @db.Uuid
+  message          String             @db.Text
+  dateCreated       DateTime          @db.Timestamp(3) @default(now())
+  document         Documents          @relation(fields: [documentId], references: [referenceNum], onDelete: Cascade)
 }
 
 enum Frequency {
