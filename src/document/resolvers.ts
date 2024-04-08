@@ -7,10 +7,11 @@ import {
   Documents,
   Referrals,
   Role,
+  Status,
 } from "@prisma/client";
 import dataClient from "../data-client";
 import pubsub from "../pubsub";
-import { sendNotification } from "../routines/documents";
+import { getDocumentStatus, sendNotification } from "../routines/documents";
 import { GraphQLError } from "graphql";
 
 interface DocumentInput extends Documents {
@@ -116,6 +117,34 @@ const resolvers = {
       return parent.dateDue.toISOString();
     },
 
+    status: async (parent: Documents) => {
+      const referrals = await dataClient.referrals.findMany({
+        where: {
+          documentId: parent.referenceNum,
+        },
+        select: {
+          status: {
+            select: {
+              category: true,
+            },
+          },
+        },
+      });
+
+      if (
+        referrals.filter(
+          (ref) => ref.status?.category === Status.NOT_ACTIONABLE
+        ).length > 0
+      )
+        return "Not Actionable";
+      else
+        return getDocumentStatus(
+          referrals.map((ref) =>
+            ref.status ? ref.status.category : Status.NOT_ACTIONABLE
+          )
+        );
+    },
+
     referredTo: async (parent: Documents) => {
       const referrals = await dataClient.referrals.findMany({
         where: {
@@ -126,16 +155,124 @@ const resolvers = {
       return referrals;
     },
 
+    assigned: async (parent: Documents, args: { officerId: string }) => {
+      const officer = await dataClient.officers.findUnique({
+        where: {
+          uuid: args.officerId,
+        },
+        select: {
+          officeId: true,
+        },
+      });
+
+      if (!officer || !officer.officeId) return [];
+
+      const assigned = await dataClient.assigned.findMany({
+        where: {
+          documentId: parent.referenceNum,
+          officer: {
+            office: {
+              id: officer.officeId,
+            },
+          },
+        },
+        select: {
+          officer: true,
+        },
+      });
+
+      return assigned.map((obj) => obj.officer);
+    },
+
     comments: async (parent: Documents, args: { officerId: string }) => {
       return await dataClient.comments.findMany({
         where: {
           documentId: parent.referenceNum,
-          sender: args.officerId,
+          OR: [
+            {
+              sender: args.officerId,
+            },
+            {
+              recipient: args.officerId,
+            },
+          ],
         },
         orderBy: {
           dateCreated: "asc",
         },
       });
+    },
+
+    recipients: async (parent: Documents, args: { officerId: string }) => {
+      const officer = await dataClient.officers.findUnique({
+        where: {
+          uuid: args.officerId,
+        },
+        select: {
+          position: {
+            select: {
+              role: true,
+            },
+          },
+          officeId: true,
+        },
+      });
+
+      if (!officer || !officer.officeId || !officer.position) return [];
+
+      if (
+        officer.position.role === Role.SUPERUSER ||
+        officer.position.role === Role.DIRECTOR
+      )
+        return dataClient.officers.findMany({
+          where: {
+            position: {
+              role: Role.CHIEF,
+            },
+            office: {
+              referrals: {
+                some: {
+                  documentId: parent.referenceNum,
+                },
+              },
+            },
+          },
+        });
+      else if (officer.position.role === Role.CHIEF)
+        return await dataClient.officers.findMany({
+          where: {
+            OR: [
+              {
+                position: {
+                  role: Role.DIRECTOR,
+                },
+              },
+              {
+                assigned: {
+                  some: {
+                    documentId: parent.referenceNum,
+                  },
+                },
+              },
+            ],
+          },
+        });
+      else
+        return await dataClient.officers.findMany({
+          where: {
+            position: {
+              role: Role.CHIEF,
+            },
+            office: {
+              id: officer.officeId,
+              referrals: {
+                some: {
+                  documentId: parent.referenceNum,
+                },
+              },
+            },
+          },
+        });
     },
   },
 
@@ -190,19 +327,62 @@ const resolvers = {
       });
     },
 
-    getDocuments: async (_: unknown, args: { officeId?: number }) => {
-      return await dataClient.documents.findMany({
+    getDocuments: async (_: unknown, args: { officerId: string }) => {
+      const officer = await dataClient.officers.findUnique({
         where: {
-          referrals: {
-            some: {
-              officeId: args.officeId,
+          uuid: args.officerId,
+        },
+        include: {
+          position: {
+            select: {
+              role: true,
             },
           },
         },
-        orderBy: {
-          dateCreated: "asc",
-        },
       });
+
+      if (!officer || !officer.position || !officer.officeId)
+        throw new GraphQLError("Officer not found.", {
+          extensions: {
+            code: "BAD_USER_INPUT",
+          },
+        });
+
+      if (
+        officer.position.role === Role.SUPERUSER ||
+        officer.position.role === Role.DIRECTOR
+      )
+        return await dataClient.documents.findMany({
+          orderBy: {
+            dateCreated: "asc",
+          },
+        });
+      else if (officer.position.role === Role.CHIEF)
+        return dataClient.documents.findMany({
+          where: {
+            referrals: {
+              some: {
+                officeId: officer.officeId,
+              },
+            },
+          },
+          orderBy: {
+            dateCreated: "asc",
+          },
+        });
+      else
+        return dataClient.documents.findMany({
+          where: {
+            assigned: {
+              some: {
+                officerId: args.officerId,
+              },
+            },
+          },
+          orderBy: {
+            dateCreated: "asc",
+          },
+        });
     },
 
     getDocumentById: async (_: unknown, args: Documents) => {
@@ -266,7 +446,8 @@ const resolvers = {
           .filter(
             (stat) =>
               stat.officeId === office.id &&
-              (stat.category === "NOT_STARTED" || stat.category === "ONGOING")
+              stat.category !== "NOT_ACTIONABLE" &&
+              stat.category !== "FINISHED"
           )
           .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
         noaction: summary
@@ -288,8 +469,8 @@ const resolvers = {
                     FROM public."Referrals" rfl
                     INNER JOIN public."DocumentStatus" status
                     ON status.id = rfl."statusId"
-                    WHERE rfl."officeId" = ${args.officeId};
-                    GROUP BY rfl."documentId", status.category;`;
+                    WHERE rfl."officeId" = ${args.officeId}
+                    GROUP BY rfl."documentId", status.category`;
       } else {
         // admin statistics
         statistics = await dataClient.$queryRaw`
@@ -311,7 +492,7 @@ const resolvers = {
         ongoing: statistics
           .filter(
             (stat) =>
-              stat.category === "NOT_STARTED" || stat.category === "ONGOING"
+              stat.category !== "NOT_ACTIONABLE" && stat.category !== "FINISHED"
           )
           .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
         noaction: statistics
@@ -580,23 +761,14 @@ const resolvers = {
         signatureId,
         tag,
         dateDue,
-        referredTo,
       } = args;
 
-      if (referredTo) {
-        // remove former referrals
-        await dataClient.referrals.deleteMany({
-          where: {
-            documentId: referenceNum,
-          },
-        });
-      }
-
-      // trigger updated document event
-      pubsub.publish(`DOCUMENT_${referenceNum}`, {
-        documentEvents: {
-          eventName: `UPDATED_DOCUMENT_${referenceNum}`,
-          eventDate: new Date().toISOString(),
+      const referredTo = await dataClient.referrals.findMany({
+        where: {
+          documentId: referenceNum,
+        },
+        select: {
+          officeId: true,
         },
       });
 

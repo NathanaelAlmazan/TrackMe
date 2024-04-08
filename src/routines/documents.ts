@@ -35,7 +35,7 @@ export function getDocumentStatus(referrals: Status[]) {
   ).length;
 
   if (ongoing > 0) return `${ongoing} Ongoing`;
-  return "Complied";
+  return "Finished";
 }
 
 export async function generateReport() {

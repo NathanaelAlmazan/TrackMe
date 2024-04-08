@@ -236,12 +236,13 @@ const resolvers = {
                                     AND EXTRACT(YEAR FROM "localDue") = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD'))
                                     AND "frequency" = 'NONE'
                                 ) OR "frequency" = 'MONTHLY'`;
-            const documents = yield data_client_1.default.$queryRaw `SELECT *
-                                FROM public."Documents" doc
-                                INNER JOIN public."DocumentStatus" status ON status.id = doc."statusId"
+            const documents = yield data_client_1.default.$queryRaw `SELECT DISTINCT doc."referenceNum", doc.subject, doc."dateDue"
+                                FROM public."Referrals" rfl
+                                INNER JOIN public."DocumentStatus" status ON status.id = rfl."statusId"
+                                INNER JOIN public."Documents" doc ON doc."referenceNum" = rfl."documentId"
                                 WHERE status.category != 'NOT_ACTIONABLE'
-                                AND EXTRACT(MONTH FROM "dateDue") = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
-                                AND EXTRACT(YEAR FROM "dateDue") = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD'))`;
+                                AND EXTRACT(MONTH FROM doc."dateDue") = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                                AND EXTRACT(YEAR FROM doc."dateDue") = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD'))`;
             // get submissions
             const submissions = yield data_client_1.default.$queryRaw `SELECT DISTINCT ON (sub."reportId", sub."localDue", sub."nationalDue") 
                                 sub."id" AS "id",

@@ -94,8 +94,11 @@ const resolvers = {
       });
     },
 
-    getOfficers: async () => {
+    getOfficers: async (_: unknown, args: { officeId?: number }) => {
       return await dataClient.officers.findMany({
+        where: {
+          officeId: args.officeId,
+        },
         orderBy: {
           firstName: "asc",
         },
@@ -130,8 +133,7 @@ const resolvers = {
       const { username, password } = args;
 
       // check username provided
-      let email: string | null = null;
-      let phone: string | null = null;
+      let officer: Officers | null = null;
       if (username.includes("@")) {
         const emailRegex = /^([a-zA-Z0-9._%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})$/;
 
@@ -142,7 +144,12 @@ const resolvers = {
             },
           });
 
-        email = username;
+        officer = await dataClient.officers.findUnique({
+          where: {
+            email: username,
+            active: true,
+          },
+        });
       } else {
         const startIndex = username.indexOf("9");
 
@@ -162,31 +169,15 @@ const resolvers = {
             },
           });
 
-        phone = phoneNumber;
-      }
-
-      if (!email && !phone)
-        throw new GraphQLError("Please provide email or phone number.", {
-          extensions: {
-            code: "BAD_USER_INPUT",
+        officer = await dataClient.officers.findUnique({
+          where: {
+            phone: phoneNumber,
+            active: true,
           },
         });
+      }
 
-      const officer = await dataClient.officers.findFirst({
-        where: {
-          OR: [
-            {
-              email,
-            },
-            {
-              phone,
-            },
-          ],
-          active: true,
-        },
-      });
-
-      if (!officer)
+      if (!officer || !officer.password)
         throw new GraphQLError("Account does not exist or inactive.", {
           extensions: {
             code: "BAD_USER_INPUT",
@@ -385,7 +376,7 @@ const resolvers = {
                 SELECT rp."name", sr."dateCreated", sr."localDue" FROM public."SubmittedReports" sr
                 INNER JOIN public."Reports" rp ON rp.id = sr."reportId"
                 WHERE (sr."localDue" - INTERVAL '7 days') < CURRENT_TIMESTAMP
-                AND sr."status" = 'ONGOING'
+                AND sr."status" = 'REFERRED'
                 AND sr."officeId" = ${officer.officeId}`;
 
       return documents
@@ -558,10 +549,48 @@ const resolvers = {
 
     requestAccountVerify: async (
       _: unknown,
-      args: { uuid: string; email?: string; phone?: string }
+      args: { uuid: string; contact: string }
     ) => {
-      if (!args.email && !args.phone)
-        throw new GraphQLError("Please provide email or phone.", {
+      const { uuid, contact } = args;
+
+      // check username provided
+      let email: string | null = null;
+      let phone: string | null = null;
+      if (contact.includes("@")) {
+        const emailRegex = /^([a-zA-Z0-9._%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})$/;
+
+        if (!emailRegex.test(contact))
+          throw new GraphQLError("Invalid email address.", {
+            extensions: {
+              code: "BAD_USER_INPUT",
+            },
+          });
+
+        email = contact;
+      } else {
+        const startIndex = contact.indexOf("9");
+
+        if (startIndex < 0)
+          throw new GraphQLError("Invalid phone number.", {
+            extensions: {
+              code: "BAD_USER_INPUT",
+            },
+          });
+
+        const phoneNumber = contact.substring(startIndex, contact.length);
+
+        if (phoneNumber.length !== 10 || !/^\d+$/.test(contact))
+          throw new GraphQLError("Invalid phone number.", {
+            extensions: {
+              code: "BAD_USER_INPUT",
+            },
+          });
+
+        phone = phoneNumber;
+      }
+
+      if (!email && !phone)
+        throw new GraphQLError("Please provide email or phone number.", {
           extensions: {
             code: "BAD_USER_INPUT",
           },
@@ -570,7 +599,7 @@ const resolvers = {
       // find officer
       const officer = await dataClient.officers.findUnique({
         where: {
-          uuid: args.uuid,
+          uuid: uuid,
         },
       });
 
@@ -584,8 +613,6 @@ const resolvers = {
       try {
         // generate code
         const code = generateSixDigitCode();
-        let email = !args.email ? undefined : args.email;
-        let phone = !args.phone ? undefined : args.phone;
         await dataClient.officers.update({
           where: {
             uuid: officer.uuid,
@@ -599,19 +626,19 @@ const resolvers = {
 
         // send code
         try {
-          if (args.email) {
+          if (email) {
             const subject = "Account Verification";
             const message =
               "A unique code to verify your account has been generated for you.";
             const content = compileContent(officer.firstName, code, message);
-            await sendEmail(args.email, subject, content);
+            await sendEmail(email, subject, content);
 
-            return args.email;
-          } else if (args.phone) {
+            return email;
+          } else if (phone) {
             const message = `${code} is your TrackMe account verification code.`;
-            await sendSms(args.phone, message);
+            await sendSms(phone, message);
 
-            return args.phone;
+            return phone;
           }
         } catch (err) {
           throw new GraphQLError("Failed to send reset code.", {
@@ -631,10 +658,48 @@ const resolvers = {
 
     confirmAccountVerify: async (
       _: unknown,
-      args: { email?: string; phone?: string; code: string }
+      args: { contact: string; code: string }
     ) => {
-      if (!args.email && !args.phone)
-        throw new GraphQLError("Please provide email or phone.", {
+      const { contact, code } = args;
+
+      // check username provided
+      let email: string | null = null;
+      let phone: string | null = null;
+      if (contact.includes("@")) {
+        const emailRegex = /^([a-zA-Z0-9._%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})$/;
+
+        if (!emailRegex.test(contact))
+          throw new GraphQLError("Invalid email address.", {
+            extensions: {
+              code: "BAD_USER_INPUT",
+            },
+          });
+
+        email = contact;
+      } else {
+        const startIndex = contact.indexOf("9");
+
+        if (startIndex < 0)
+          throw new GraphQLError("Invalid phone number.", {
+            extensions: {
+              code: "BAD_USER_INPUT",
+            },
+          });
+
+        const phoneNumber = contact.substring(startIndex, contact.length);
+
+        if (phoneNumber.length !== 10 || !/^\d+$/.test(contact))
+          throw new GraphQLError("Invalid phone number.", {
+            extensions: {
+              code: "BAD_USER_INPUT",
+            },
+          });
+
+        phone = phoneNumber;
+      }
+
+      if (!email && !phone)
+        throw new GraphQLError("Please provide email or phone number.", {
           extensions: {
             code: "BAD_USER_INPUT",
           },
@@ -645,12 +710,12 @@ const resolvers = {
         where: {
           OR: [
             {
-              email: args.email,
-              code: args.code,
+              email: email,
+              code: code,
             },
             {
-              phone: args.phone,
-              code: args.code,
+              phone: phone,
+              code: code,
             },
           ],
         },
@@ -774,19 +839,54 @@ const resolvers = {
     // ============================== OFFICERS ===================================
 
     createOfficer: async (_: unknown, args: Officers) => {
-      const { firstName, lastName, positionId, officeId, password } = args;
+      const {
+        firstName,
+        lastName,
+        positionId,
+        officeId,
+        email,
+        phone,
+        password,
+      } = args;
 
       try {
+        const account = await dataClient.officers.findUnique({
+          where: {
+            firstName_lastName: {
+              firstName: firstName,
+              lastName: lastName,
+            },
+          },
+        });
+
+        if (account) {
+          return await dataClient.officers.update({
+            where: {
+              uuid: account.uuid,
+            },
+            data: {
+              firstName: firstName,
+              lastName: lastName,
+              email: email,
+              phone: phone,
+              password: password ? await bcrypt.hash(password, 12) : null,
+            },
+          });
+        }
+
         return await dataClient.officers.create({
           data: {
             firstName: firstName,
             lastName: lastName,
             officeId: officeId,
             positionId: positionId,
-            password: await bcrypt.hash(password, 12),
+            email: email,
+            phone: phone,
+            password: password ? await bcrypt.hash(password, 12) : null,
           },
         });
       } catch (err) {
+        console.log(err);
         throw new GraphQLError("Account already exists.", {
           extensions: {
             code: "BAD_USER_INPUT",

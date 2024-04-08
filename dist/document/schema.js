@@ -3,8 +3,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const graphql_tag_1 = require("graphql-tag");
 const schema = (0, graphql_tag_1.gql) `
   enum Status {
-    NOT_STARTED
-    ONGOING
+    REFERRED
+    ASSIGNED
+    PROCESSED
+    SUBMITTED
     FINISHED
     NOT_ACTIONABLE
   }
@@ -66,10 +68,13 @@ const schema = (0, graphql_tag_1.gql) `
     purpose: DocumentPurpose
     tag: Tags
     dateCreated: String!
+    status: String!
     dateDue: String!
     signatory: Officers!
     referredTo: [Referrals!]!
-    comments: [Comments!]!
+    assigned(officerId: String!): [Officers!]!
+    comments(officerId: String!): [Comments!]!
+    recipients(officerId: String!): [Officers!]!
   }
 
   enum Assignment {
@@ -99,7 +104,7 @@ const schema = (0, graphql_tag_1.gql) `
     getDocumentTypes: [DocumentTypes!]!
     getDocumentPurposes: [DocumentPurpose!]!
     getDocumentStatus: [DocumentStatus!]!
-    getDocuments(officeId: Int): [Documents!]!
+    getDocuments(officerId: String!): [Documents!]!
     getDocumentById(referenceNum: String!): Documents!
     getTempReferenceNum: String!
     getDocumentStatistics(officeId: Int): DocumentStatistics!
@@ -145,7 +150,6 @@ const schema = (0, graphql_tag_1.gql) `
       tag: Tags
       dateDue: String
       signatureId: String!
-      referredTo: [ReferralInput]
     ): Documents!
 
     documentUpdateStatus(

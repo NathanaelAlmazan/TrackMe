@@ -2,8 +2,10 @@ import { gql } from "graphql-tag";
 
 const schema = gql`
   enum Status {
-    NOT_STARTED
-    ONGOING
+    REFERRED
+    ASSIGNED
+    PROCESSED
+    SUBMITTED
     FINISHED
     NOT_ACTIONABLE
   }
@@ -65,10 +67,13 @@ const schema = gql`
     purpose: DocumentPurpose
     tag: Tags
     dateCreated: String!
+    status: String!
     dateDue: String!
     signatory: Officers!
     referredTo: [Referrals!]!
-    comments: [Comments!]!
+    assigned(officerId: String!): [Officers!]!
+    comments(officerId: String!): [Comments!]!
+    recipients(officerId: String!): [Officers!]!
   }
 
   enum Assignment {
@@ -98,7 +103,7 @@ const schema = gql`
     getDocumentTypes: [DocumentTypes!]!
     getDocumentPurposes: [DocumentPurpose!]!
     getDocumentStatus: [DocumentStatus!]!
-    getDocuments(officeId: Int): [Documents!]!
+    getDocuments(officerId: String!): [Documents!]!
     getDocumentById(referenceNum: String!): Documents!
     getTempReferenceNum: String!
     getDocumentStatistics(officeId: Int): DocumentStatistics!
@@ -144,7 +149,6 @@ const schema = gql`
       tag: Tags
       dateDue: String
       signatureId: String!
-      referredTo: [ReferralInput]
     ): Documents!
 
     documentUpdateStatus(

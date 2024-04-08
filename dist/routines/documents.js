@@ -43,7 +43,7 @@ function getDocumentStatus(referrals) {
     const ongoing = referrals.filter((ref) => ref !== client_1.Status.FINISHED && ref !== client_1.Status.NOT_ACTIONABLE).length;
     if (ongoing > 0)
         return `${ongoing} Ongoing`;
-    return "Complied";
+    return "Finished";
 }
 exports.getDocumentStatus = getDocumentStatus;
 function generateReport() {

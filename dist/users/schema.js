@@ -45,13 +45,12 @@ const schema = (0, graphql_tag_1.gql) `
 
   extend type Query {
     getOffices: [Offices!]!
-    getOfficers: [Officers!]!
+    getOfficers(officeId: Int): [Officers!]!
     getPositions: [Positions!]!
     getSignatories: [Officers!]!
     loginOfficer(username: String!, password: String!): Officers
     getOfficerById(uuid: String!): Officers
     getNotifications(uuid: String!): [Notifications!]!
-    generateReport: String!
 
     requestResetPassword(email: String, phone: String): String!
     confirmResetPassword(
@@ -61,8 +60,10 @@ const schema = (0, graphql_tag_1.gql) `
       password: String!
     ): Officers!
 
-    requestAccountVerify(uuid: String!, email: String, phone: String): String!
-    confirmAccountVerify(email: String, phone: String, code: String!): Officers!
+    requestAccountVerify(uuid: String!, contact: String!): String!
+    confirmAccountVerify(contact: String!, code: String!): Officers!
+
+    generateReport: String!
   }
 
   extend type Mutation {
@@ -79,7 +80,9 @@ const schema = (0, graphql_tag_1.gql) `
       lastName: String!
       positionId: Int!
       officeId: Int!
-      password: String!
+      email: String
+      phone: String
+      password: String
     ): Officers!
     updateOfficer(
       uuid: String!

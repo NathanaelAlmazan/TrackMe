@@ -137,6 +137,7 @@ app.post("/upload", upload.array("files"), (req, res) => {
         const files = req.files;
         return res.status(200).json({ files: files.map(file => ({
                 fileName: file.originalname,
+                filePath: `/${file.filename}`,
                 fileUrl: `${process.env.BASE_MEDIA_URL}/${file.filename}`,
                 fileType: file.mimetype
             })) });

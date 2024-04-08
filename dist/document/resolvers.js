@@ -95,6 +95,24 @@ const resolvers = {
         dateDue: (parent) => {
             return parent.dateDue.toISOString();
         },
+        status: (parent) => __awaiter(void 0, void 0, void 0, function* () {
+            const referrals = yield data_client_1.default.referrals.findMany({
+                where: {
+                    documentId: parent.referenceNum,
+                },
+                select: {
+                    status: {
+                        select: {
+                            category: true,
+                        },
+                    },
+                },
+            });
+            if (referrals.filter((ref) => { var _a; return ((_a = ref.status) === null || _a === void 0 ? void 0 : _a.category) === client_1.Status.NOT_ACTIONABLE; }).length > 0)
+                return "Not Actionable";
+            else
+                return (0, documents_1.getDocumentStatus)(referrals.map((ref) => ref.status ? ref.status.category : client_1.Status.NOT_ACTIONABLE));
+        }),
         referredTo: (parent) => __awaiter(void 0, void 0, void 0, function* () {
             const referrals = yield data_client_1.default.referrals.findMany({
                 where: {
@@ -103,16 +121,117 @@ const resolvers = {
             });
             return referrals;
         }),
+        assigned: (parent, args) => __awaiter(void 0, void 0, void 0, function* () {
+            const officer = yield data_client_1.default.officers.findUnique({
+                where: {
+                    uuid: args.officerId,
+                },
+                select: {
+                    officeId: true,
+                },
+            });
+            if (!officer || !officer.officeId)
+                return [];
+            const assigned = yield data_client_1.default.assigned.findMany({
+                where: {
+                    documentId: parent.referenceNum,
+                    officer: {
+                        office: {
+                            id: officer.officeId,
+                        },
+                    },
+                },
+                select: {
+                    officer: true,
+                },
+            });
+            return assigned.map((obj) => obj.officer);
+        }),
         comments: (parent, args) => __awaiter(void 0, void 0, void 0, function* () {
             return yield data_client_1.default.comments.findMany({
                 where: {
                     documentId: parent.referenceNum,
-                    sender: args.officerId,
+                    OR: [
+                        {
+                            sender: args.officerId,
+                        },
+                        {
+                            recipient: args.officerId,
+                        },
+                    ],
                 },
                 orderBy: {
                     dateCreated: "asc",
                 },
             });
+        }),
+        recipients: (parent, args) => __awaiter(void 0, void 0, void 0, function* () {
+            const officer = yield data_client_1.default.officers.findUnique({
+                where: {
+                    uuid: args.officerId,
+                },
+                select: {
+                    position: {
+                        select: {
+                            role: true,
+                        },
+                    },
+                    officeId: true,
+                },
+            });
+            if (!officer || !officer.officeId || !officer.position)
+                return [];
+            if (officer.position.role === client_1.Role.SUPERUSER ||
+                officer.position.role === client_1.Role.DIRECTOR)
+                return data_client_1.default.officers.findMany({
+                    where: {
+                        position: {
+                            role: client_1.Role.CHIEF,
+                        },
+                        office: {
+                            referrals: {
+                                some: {
+                                    documentId: parent.referenceNum,
+                                },
+                            },
+                        },
+                    },
+                });
+            else if (officer.position.role === client_1.Role.CHIEF)
+                return yield data_client_1.default.officers.findMany({
+                    where: {
+                        OR: [
+                            {
+                                position: {
+                                    role: client_1.Role.DIRECTOR,
+                                },
+                            },
+                            {
+                                assigned: {
+                                    some: {
+                                        documentId: parent.referenceNum,
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                });
+            else
+                return yield data_client_1.default.officers.findMany({
+                    where: {
+                        position: {
+                            role: client_1.Role.CHIEF,
+                        },
+                        office: {
+                            id: officer.officeId,
+                            referrals: {
+                                some: {
+                                    documentId: parent.referenceNum,
+                                },
+                            },
+                        },
+                    },
+                });
         }),
     },
     Comments: {
@@ -160,18 +279,57 @@ const resolvers = {
             });
         }),
         getDocuments: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            return yield data_client_1.default.documents.findMany({
+            const officer = yield data_client_1.default.officers.findUnique({
                 where: {
-                    referrals: {
-                        some: {
-                            officeId: args.officeId,
+                    uuid: args.officerId,
+                },
+                include: {
+                    position: {
+                        select: {
+                            role: true,
                         },
                     },
                 },
-                orderBy: {
-                    dateCreated: "asc",
-                },
             });
+            if (!officer || !officer.position || !officer.officeId)
+                throw new graphql_1.GraphQLError("Officer not found.", {
+                    extensions: {
+                        code: "BAD_USER_INPUT",
+                    },
+                });
+            if (officer.position.role === client_1.Role.SUPERUSER ||
+                officer.position.role === client_1.Role.DIRECTOR)
+                return yield data_client_1.default.documents.findMany({
+                    orderBy: {
+                        dateCreated: "asc",
+                    },
+                });
+            else if (officer.position.role === client_1.Role.CHIEF)
+                return data_client_1.default.documents.findMany({
+                    where: {
+                        referrals: {
+                            some: {
+                                officeId: officer.officeId,
+                            },
+                        },
+                    },
+                    orderBy: {
+                        dateCreated: "asc",
+                    },
+                });
+            else
+                return data_client_1.default.documents.findMany({
+                    where: {
+                        assigned: {
+                            some: {
+                                officerId: args.officerId,
+                            },
+                        },
+                    },
+                    orderBy: {
+                        dateCreated: "asc",
+                    },
+                });
         }),
         getDocumentById: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             return yield data_client_1.default.documents.findUnique({
@@ -220,7 +378,8 @@ const resolvers = {
                     .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
                 ongoing: summary
                     .filter((stat) => stat.officeId === office.id &&
-                    (stat.category === "NOT_STARTED" || stat.category === "ONGOING"))
+                    stat.category !== "NOT_ACTIONABLE" &&
+                    stat.category !== "FINISHED")
                     .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
                 noaction: summary
                     .filter((stat) => stat.officeId === office.id && stat.category === "NOT_ACTIONABLE")
@@ -236,8 +395,8 @@ const resolvers = {
                     FROM public."Referrals" rfl
                     INNER JOIN public."DocumentStatus" status
                     ON status.id = rfl."statusId"
-                    WHERE rfl."officeId" = ${args.officeId};
-                    GROUP BY rfl."documentId", status.category;`;
+                    WHERE rfl."officeId" = ${args.officeId}
+                    GROUP BY rfl."documentId", status.category`;
             }
             else {
                 // admin statistics
@@ -254,7 +413,7 @@ const resolvers = {
                     .filter((stat) => stat.category === "FINISHED")
                     .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
                 ongoing: statistics
-                    .filter((stat) => stat.category === "NOT_STARTED" || stat.category === "ONGOING")
+                    .filter((stat) => stat.category !== "NOT_ACTIONABLE" && stat.category !== "FINISHED")
                     .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
                 noaction: statistics
                     .filter((stat) => stat.category === "NOT_ACTIONABLE")
@@ -458,20 +617,13 @@ const resolvers = {
             });
         }),
         updateDocument: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            const { referenceNum, subject, description, receivedFrom, typeId, purposeId, signatureId, tag, dateDue, referredTo, } = args;
-            if (referredTo) {
-                // remove former referrals
-                yield data_client_1.default.referrals.deleteMany({
-                    where: {
-                        documentId: referenceNum,
-                    },
-                });
-            }
-            // trigger updated document event
-            pubsub_1.default.publish(`DOCUMENT_${referenceNum}`, {
-                documentEvents: {
-                    eventName: `UPDATED_DOCUMENT_${referenceNum}`,
-                    eventDate: new Date().toISOString(),
+            const { referenceNum, subject, description, receivedFrom, typeId, purposeId, signatureId, tag, dateDue, } = args;
+            const referredTo = yield data_client_1.default.referrals.findMany({
+                where: {
+                    documentId: referenceNum,
+                },
+                select: {
+                    officeId: true,
                 },
             });
             // trigger updated document event

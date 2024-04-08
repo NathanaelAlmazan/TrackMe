@@ -41,7 +41,7 @@ model Officers {
   officeId    BigInt?
   email       String?       @db.VarChar(50) @unique
   phone       String?       @db.VarChar(10) @unique
-  password    String        @db.Text
+  password    String?       @db.Text
   signature   String?       @db.Text
   active      Boolean       @default(false)
   verified    Boolean       @default(false)
