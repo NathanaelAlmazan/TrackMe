@@ -1016,6 +1016,19 @@ const resolvers = {
     deleteOfficer: async (_: unknown, args: Officers) => {
       const { uuid } = args;
 
+      await dataClient.comments.deleteMany({
+        where: {
+          OR: [
+            {
+              sender: uuid
+            },
+            {
+              recipient: uuid
+            }
+          ]
+        }
+      })
+
       return await dataClient.officers.delete({
         where: {
           uuid: uuid,
