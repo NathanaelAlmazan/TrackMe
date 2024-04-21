@@ -296,9 +296,29 @@ const resolvers = {
           },
         });
 
+        const submitted = await dataClient.referrals.findMany({
+          where: {
+            status: {
+              category: Status.SUBMITTED,
+            },
+          },
+          include: {
+            document: {
+              select: {
+                referenceNum: true,
+              },
+            },
+            office: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        });
+
         return documents
           .map((document) => ({
-            subject: "Assigned Document",
+            subject: "Overdue Document",
             description: `Document ${document.referenceNum} is ${getDayDiff(
               document.dateDue
             )} days overdue.`,
@@ -311,6 +331,17 @@ const resolvers = {
               }
             ),
           }))
+          .concat(
+            submitted.map((sub) => ({
+              subject: "Submitted Document",
+              description: `${sub.office.name} submitted ${sub.document.referenceNum} for your review.`,
+              timestamp: new Date().toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+                weekday: "short",
+              }),
+            }))
+          )
           .concat(
             reports.map((report) => {
               const offices = submissions.filter(
@@ -331,6 +362,53 @@ const resolvers = {
               };
             })
           )
+          .concat(
+            events.map((event) => ({
+              subject: "Event",
+              description: event.subject,
+              timestamp: new Date(event.date).toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+                weekday: "short",
+              }),
+            }))
+          );
+      } else if (officer.position?.role === Role.OFFICER) {
+        const documents = await dataClient.assigned.findMany({
+          where: {
+            officerId: args.uuid,
+          },
+          include: {
+            document: {
+              select: {
+                referenceNum: true,
+                dateCreated: true,
+                dateDue: true,
+              },
+            },
+          },
+        });
+
+        return documents
+          .map((document) => ({
+            subject: "Assigned Document",
+            description: `Document ${
+              document.document.referenceNum
+            } has been assigned to your office for completion by ${new Date(
+              document.document.dateDue
+            ).toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+              weekday: "short",
+            })}`,
+            timestamp: new Date(
+              document.document.dateCreated
+            ).toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+              weekday: "short",
+            }),
+          }))
           .concat(
             events.map((event) => ({
               subject: "Event",

@@ -173,7 +173,7 @@ const resolvers = {
                 });
         }),
         getNotifications: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            var _a;
+            var _a, _b;
             // get officer
             const officer = yield data_client_1.default.officers.findUnique({
                 where: {
@@ -269,9 +269,28 @@ const resolvers = {
                         },
                     },
                 });
+                const submitted = yield data_client_1.default.referrals.findMany({
+                    where: {
+                        status: {
+                            category: client_1.Status.SUBMITTED,
+                        },
+                    },
+                    include: {
+                        document: {
+                            select: {
+                                referenceNum: true,
+                            },
+                        },
+                        office: {
+                            select: {
+                                name: true,
+                            },
+                        },
+                    },
+                });
                 return documents
                     .map((document) => ({
-                    subject: "Assigned Document",
+                    subject: "Overdue Document",
                     description: `Document ${document.referenceNum} is ${(0, dates_1.getDayDiff)(document.dateDue)} days overdue.`,
                     timestamp: new Date(document.dateDue).toLocaleDateString(undefined, {
                         month: "short",
@@ -279,6 +298,15 @@ const resolvers = {
                         weekday: "short",
                     }),
                 }))
+                    .concat(submitted.map((sub) => ({
+                    subject: "Submitted Document",
+                    description: `${sub.office.name} submitted ${sub.document.referenceNum} for your review.`,
+                    timestamp: new Date().toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        weekday: "short",
+                    }),
+                })))
                     .concat(reports.map((report) => {
                     const offices = submissions.filter((sub) => sub.reportId === report.id);
                     const overdue = offices[0].localDue;
@@ -291,6 +319,45 @@ const resolvers = {
                             weekday: "short",
                         }),
                     };
+                }))
+                    .concat(events.map((event) => ({
+                    subject: "Event",
+                    description: event.subject,
+                    timestamp: new Date(event.date).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        weekday: "short",
+                    }),
+                })));
+            }
+            else if (((_b = officer.position) === null || _b === void 0 ? void 0 : _b.role) === client_1.Role.OFFICER) {
+                const documents = yield data_client_1.default.assigned.findMany({
+                    where: {
+                        officerId: args.uuid,
+                    },
+                    include: {
+                        document: {
+                            select: {
+                                referenceNum: true,
+                                dateCreated: true,
+                                dateDue: true,
+                            },
+                        },
+                    },
+                });
+                return documents
+                    .map((document) => ({
+                    subject: "Assigned Document",
+                    description: `Document ${document.document.referenceNum} has been assigned to your office for completion by ${new Date(document.document.dateDue).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        weekday: "short",
+                    })}`,
+                    timestamp: new Date(document.document.dateCreated).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        weekday: "short",
+                    }),
                 }))
                     .concat(events.map((event) => ({
                     subject: "Event",

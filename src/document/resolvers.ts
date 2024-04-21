@@ -9,6 +9,7 @@ import {
   Role,
   Status,
 } from "@prisma/client";
+import webpush from "web-push";
 import dataClient from "../data-client";
 import pubsub from "../pubsub";
 import { getDocumentStatus, sendNotification } from "../routines/documents";
@@ -850,6 +851,35 @@ const resolvers = {
         },
       });
 
+      // send notifications
+      const recipients = await dataClient.officers.findMany({
+        where: {
+          OR: [
+            {
+              position: {
+                role: Role.DIRECTOR,
+              },
+            },
+            {
+              officeId: args.officeId,
+            },
+          ],
+        },
+      });
+
+      const payload = JSON.stringify({
+        title: `${updated.status?.label} ${args.referenceNum}`,
+        body: `Document status changed to ${updated.status?.label}`,
+        icon: "https://res.cloudinary.com/ddpqji6uq/image/upload/v1691402859/bir_logo_hdniut.png",
+      });
+
+      recipients.forEach((officer) => {
+        if (officer.device)
+          webpush
+            .sendNotification(JSON.parse(officer.device), payload)
+            .catch((err) => console.error(err));
+      });
+
       return updated.status;
     },
 
@@ -930,6 +960,29 @@ const resolvers = {
           assignment: Assignment.MEMBER,
         })),
       });
+
+      // send notifications to assigned officers
+      const recipients = await dataClient.officers.findMany({
+        where: {
+          uuid: {
+            in: args.officerIds,
+          },
+        },
+      });
+
+      const payload = JSON.stringify({
+        title: `Assigned ${args.documentId}`,
+        body: `You are assigned to accomplish ${args.documentId}`,
+        icon: "https://res.cloudinary.com/ddpqji6uq/image/upload/v1691402859/bir_logo_hdniut.png",
+      });
+
+      recipients.forEach((officer) => {
+        if (officer.device)
+          webpush
+            .sendNotification(JSON.parse(officer.device), payload)
+            .catch((err) => console.error(err));
+      });
+
       return await dataClient.documents.findUnique({
         where: {
           referenceNum: args.documentId,

@@ -13,6 +13,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const client_1 = require("@prisma/client");
+const web_push_1 = __importDefault(require("web-push"));
 const data_client_1 = __importDefault(require("../data-client"));
 const pubsub_1 = __importDefault(require("../pubsub"));
 const documents_1 = require("../routines/documents");
@@ -657,6 +658,7 @@ const resolvers = {
             });
         }),
         documentUpdateStatus: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
+            var _a, _b;
             const updated = yield data_client_1.default.referrals.update({
                 where: {
                     officeId_documentId: {
@@ -691,6 +693,32 @@ const resolvers = {
                     eventName: `UPDATED_DOCUMENT_${args.referenceNum}`,
                     eventDate: new Date().toISOString(),
                 },
+            });
+            // send notifications
+            const recipients = yield data_client_1.default.officers.findMany({
+                where: {
+                    OR: [
+                        {
+                            position: {
+                                role: client_1.Role.DIRECTOR,
+                            },
+                        },
+                        {
+                            officeId: args.officeId,
+                        },
+                    ],
+                },
+            });
+            const payload = JSON.stringify({
+                title: `${(_a = updated.status) === null || _a === void 0 ? void 0 : _a.label} ${args.referenceNum}`,
+                body: `Document status changed to ${(_b = updated.status) === null || _b === void 0 ? void 0 : _b.label}`,
+                icon: "https://res.cloudinary.com/ddpqji6uq/image/upload/v1691402859/bir_logo_hdniut.png",
+            });
+            recipients.forEach((officer) => {
+                if (officer.device)
+                    web_push_1.default
+                        .sendNotification(JSON.parse(officer.device), payload)
+                        .catch((err) => console.error(err));
             });
             return updated.status;
         }),
@@ -756,6 +784,25 @@ const resolvers = {
                     officerId: officerId,
                     assignment: client_1.Assignment.MEMBER,
                 })),
+            });
+            // send notifications to assigned officers
+            const recipients = yield data_client_1.default.officers.findMany({
+                where: {
+                    uuid: {
+                        in: args.officerIds,
+                    },
+                },
+            });
+            const payload = JSON.stringify({
+                title: `Assigned ${args.documentId}`,
+                body: `You are assigned to accomplish ${args.documentId}`,
+                icon: "https://res.cloudinary.com/ddpqji6uq/image/upload/v1691402859/bir_logo_hdniut.png",
+            });
+            recipients.forEach((officer) => {
+                if (officer.device)
+                    web_push_1.default
+                        .sendNotification(JSON.parse(officer.device), payload)
+                        .catch((err) => console.error(err));
             });
             return yield data_client_1.default.documents.findUnique({
                 where: {
