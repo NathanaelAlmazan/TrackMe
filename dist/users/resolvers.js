@@ -859,6 +859,18 @@ const resolvers = {
         }),
         deleteOfficer: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             const { uuid } = args;
+            yield data_client_1.default.comments.deleteMany({
+                where: {
+                    OR: [
+                        {
+                            sender: uuid
+                        },
+                        {
+                            recipient: uuid
+                        }
+                    ]
+                }
+            });
             return yield data_client_1.default.officers.delete({
                 where: {
                     uuid: uuid,
