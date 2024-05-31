@@ -18,6 +18,8 @@ import {
 import { getDayDiff } from "../utils/dates";
 import { generateReport } from "../routines/documents";
 
+export const BIN_OFFICE = 20;
+
 const resolvers = {
   Positions: {
     id: (parent: Positions) => {
@@ -88,16 +90,32 @@ const resolvers = {
 
     getOffices: async () => {
       return await dataClient.offices.findMany({
+        where: {
+          id: {
+            not: BIN_OFFICE,
+          }
+        },
         orderBy: {
           name: "asc",
         },
       });
     },
 
-    getOfficers: async (_: unknown, args: { officeId?: number }) => {
+    getOfficers: async (_: unknown, args: { officeId?: number[] }) => {
       return await dataClient.officers.findMany({
         where: {
-          officeId: args.officeId,
+          AND: [
+            {
+              officeId: {
+                in: args.officeId
+              },
+            },
+            {
+              officeId: {
+                not: BIN_OFFICE,
+              }
+            }
+          ]
         },
         orderBy: {
           firstName: "asc",
@@ -319,17 +337,14 @@ const resolvers = {
         return documents
           .map((document) => ({
             subject: "Overdue Document",
-            description: `Document ${document.referenceNum} is ${getDayDiff(
-              document.dateDue
-            )} days overdue.`,
-            timestamp: new Date(document.dateDue).toLocaleDateString(
-              undefined,
-              {
-                month: "short",
-                day: "numeric",
-                weekday: "short",
-              }
-            ),
+            description: `Document ${document.referenceNum} is ${
+              document.dateDue && getDayDiff(document.dateDue)
+            } days overdue.`,
+            timestamp: new Date().toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+              weekday: "short",
+            }),
           }))
           .concat(
             submitted.map((sub) => ({
@@ -392,15 +407,17 @@ const resolvers = {
         return documents
           .map((document) => ({
             subject: "Assigned Document",
-            description: `Document ${
-              document.document.referenceNum
-            } has been assigned to your office for completion by ${new Date(
-              document.document.dateDue
-            ).toLocaleDateString(undefined, {
-              month: "short",
-              day: "numeric",
-              weekday: "short",
-            })}`,
+            description: document.document.dateDue
+              ? `Document ${
+                  document.document.referenceNum
+                } has been assigned to your office for completion by ${new Date(
+                  document.document.dateDue
+                ).toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  weekday: "short",
+                })}`
+              : `Document ${document.document.referenceNum} has been assigned to your office`,
             timestamp: new Date(
               document.document.dateCreated
             ).toLocaleDateString(undefined, {
@@ -460,15 +477,17 @@ const resolvers = {
       return documents
         .map((document) => ({
           subject: "Assigned Document",
-          description: `Document ${
-            document.referenceNum
-          } has been assigned to your office for completion by ${new Date(
-            document.dateDue
-          ).toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-            weekday: "short",
-          })}`,
+          description: document.dateDue
+              ? `Document ${
+                  document.referenceNum
+                } has been assigned to your office for completion by ${new Date(
+                  document.dateDue
+                ).toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  weekday: "short",
+                })}`
+              : `Document ${document.referenceNum} has been assigned to your office`,
           timestamp: new Date(document.dateCreated).toLocaleDateString(
             undefined,
             {
@@ -945,6 +964,8 @@ const resolvers = {
             data: {
               firstName: firstName,
               lastName: lastName,
+              officeId: officeId,
+              positionId: positionId,
               email: email,
               phone: phone,
               password: password ? await bcrypt.hash(password, 12) : null,
@@ -1020,14 +1041,14 @@ const resolvers = {
         where: {
           OR: [
             {
-              sender: uuid
+              sender: uuid,
             },
             {
-              recipient: uuid
-            }
-          ]
-        }
-      })
+              recipient: uuid,
+            },
+          ],
+        },
+      });
 
       return await dataClient.officers.delete({
         where: {

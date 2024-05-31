@@ -1,5 +1,5 @@
 import { RedisPubSub } from "graphql-redis-subscriptions";
-import Redis, { RedisOptions } from "ioredis";
+import Redis from "ioredis";
 import dotenv from "dotenv";
 
 dotenv.config();

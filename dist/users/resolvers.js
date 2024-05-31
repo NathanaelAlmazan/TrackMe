@@ -12,6 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.BIN_OFFICE = void 0;
 const client_1 = require("@prisma/client");
 const graphql_1 = require("graphql");
 const bcrypt_1 = __importDefault(require("bcrypt"));
@@ -19,6 +20,7 @@ const data_client_1 = __importDefault(require("../data-client"));
 const smtp_1 = require("../utils/smtp");
 const dates_1 = require("../utils/dates");
 const documents_1 = require("../routines/documents");
+exports.BIN_OFFICE = 20;
 const resolvers = {
     Positions: {
         id: (parent) => {
@@ -81,6 +83,11 @@ const resolvers = {
         }),
         getOffices: () => __awaiter(void 0, void 0, void 0, function* () {
             return yield data_client_1.default.offices.findMany({
+                where: {
+                    id: {
+                        not: exports.BIN_OFFICE,
+                    }
+                },
                 orderBy: {
                     name: "asc",
                 },
@@ -89,7 +96,18 @@ const resolvers = {
         getOfficers: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             return yield data_client_1.default.officers.findMany({
                 where: {
-                    officeId: args.officeId,
+                    AND: [
+                        {
+                            officeId: {
+                                in: args.officeId
+                            },
+                        },
+                        {
+                            officeId: {
+                                not: exports.BIN_OFFICE,
+                            }
+                        }
+                    ]
                 },
                 orderBy: {
                     firstName: "asc",
@@ -291,8 +309,8 @@ const resolvers = {
                 return documents
                     .map((document) => ({
                     subject: "Overdue Document",
-                    description: `Document ${document.referenceNum} is ${(0, dates_1.getDayDiff)(document.dateDue)} days overdue.`,
-                    timestamp: new Date(document.dateDue).toLocaleDateString(undefined, {
+                    description: `Document ${document.referenceNum} is ${document.dateDue && (0, dates_1.getDayDiff)(document.dateDue)} days overdue.`,
+                    timestamp: new Date().toLocaleDateString(undefined, {
                         month: "short",
                         day: "numeric",
                         weekday: "short",
@@ -348,11 +366,13 @@ const resolvers = {
                 return documents
                     .map((document) => ({
                     subject: "Assigned Document",
-                    description: `Document ${document.document.referenceNum} has been assigned to your office for completion by ${new Date(document.document.dateDue).toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        weekday: "short",
-                    })}`,
+                    description: document.document.dateDue
+                        ? `Document ${document.document.referenceNum} has been assigned to your office for completion by ${new Date(document.document.dateDue).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            weekday: "short",
+                        })}`
+                        : `Document ${document.document.referenceNum} has been assigned to your office`,
                     timestamp: new Date(document.document.dateCreated).toLocaleDateString(undefined, {
                         month: "short",
                         day: "numeric",
@@ -404,11 +424,13 @@ const resolvers = {
             return documents
                 .map((document) => ({
                 subject: "Assigned Document",
-                description: `Document ${document.referenceNum} has been assigned to your office for completion by ${new Date(document.dateDue).toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    weekday: "short",
-                })}`,
+                description: document.dateDue
+                    ? `Document ${document.referenceNum} has been assigned to your office for completion by ${new Date(document.dateDue).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        weekday: "short",
+                    })}`
+                    : `Document ${document.referenceNum} has been assigned to your office`,
                 timestamp: new Date(document.dateCreated).toLocaleDateString(undefined, {
                     month: "short",
                     day: "numeric",
@@ -800,6 +822,8 @@ const resolvers = {
                         data: {
                             firstName: firstName,
                             lastName: lastName,
+                            officeId: officeId,
+                            positionId: positionId,
                             email: email,
                             phone: phone,
                             password: password ? yield bcrypt_1.default.hash(password, 12) : null,
@@ -863,13 +887,13 @@ const resolvers = {
                 where: {
                     OR: [
                         {
-                            sender: uuid
+                            sender: uuid,
                         },
                         {
-                            recipient: uuid
-                        }
-                    ]
-                }
+                            recipient: uuid,
+                        },
+                    ],
+                },
             });
             return yield data_client_1.default.officers.delete({
                 where: {

@@ -45,7 +45,7 @@ const schema = (0, graphql_tag_1.gql) `
 
   extend type Query {
     getOffices: [Offices!]!
-    getOfficers(officeId: Int): [Officers!]!
+    getOfficers(officeId: [Int!]): [Officers!]!
     getPositions: [Positions!]!
     getSignatories: [Officers!]!
     loginOfficer(username: String!, password: String!): Officers

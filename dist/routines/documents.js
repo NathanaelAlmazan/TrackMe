@@ -83,9 +83,17 @@ function generateReport() {
             { key: "referred", header: "Referred" },
             { key: "closed", header: "Closed" },
             { key: "ongoing", header: "Ongoing" },
-            { key: "noaction", header: "No Action" },
+            { key: "noaction", header: "Not Actionable" },
         ];
         statSheet.addRows(statistics);
+        // summarize
+        statSheet.addRow({
+            office: "Total",
+            referred: statistics.reduce((acc, curr) => acc + curr.referred, 0),
+            closed: statistics.reduce((acc, curr) => acc + curr.closed, 0),
+            ongoing: statistics.reduce((acc, curr) => acc + curr.ongoing, 0),
+            noaction: statistics.reduce((acc, curr) => acc + curr.noaction, 0),
+        });
         // Set column colors
         statSheet.columns.forEach((column) => {
             column.width = 20;
@@ -99,7 +107,7 @@ function generateReport() {
                             fgColor: { argb: "FFA500" }, // Orange
                         };
                     }
-                    if (rowNumber === statistics.length + 1) {
+                    if (rowNumber === statistics.length + 2) {
                         // Data row color
                         cell.fill = {
                             type: "pattern",
@@ -118,6 +126,17 @@ function generateReport() {
                 dateCreated: true,
                 receivedFrom: true,
                 tag: true,
+                assigned: {
+                    select: {
+                        officer: {
+                            select: {
+                                firstName: true,
+                                lastName: true,
+                            },
+                        },
+                        assignee: true,
+                    },
+                },
                 referrals: {
                     select: {
                         office: {
@@ -139,7 +158,12 @@ function generateReport() {
             subject: doc.subject,
             dateCreated: doc.dateCreated,
             receivedFrom: doc.receivedFrom,
-            referredTo: doc.referrals.map((ref) => ref.office.name).join(", "),
+            referredTo: doc.assigned.filter((a) => a.assignee === "DIRECTOR").length > 0
+                ? doc.assigned
+                    .filter((a) => a.assignee === "DIRECTOR")
+                    .map((ref) => `${ref.officer.firstName} ${ref.officer.lastName}`)
+                    .join(", ")
+                : doc.referrals.map((ref) => ref.office.name).join(", "),
             status: getDocumentStatus(doc.referrals.map((ref) => ref.status ? ref.status.category : client_1.Status.NOT_ACTIONABLE)),
             tag: doc.tag,
         }));

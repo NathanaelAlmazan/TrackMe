@@ -307,7 +307,7 @@ const resolvers = {
                 subject: document.referenceNum,
                 description: document.subject,
                 image: null,
-                date: new Date(document.dateDue).toISOString(),
+                date: document.dateDue ? new Date(document.dateDue).toISOString() : "",
                 dateDue: "",
                 frequency: "NONE",
                 type: "DOCUMENT",

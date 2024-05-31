@@ -81,7 +81,6 @@ model DocumentTypes {
 model DocumentPurpose {
   id            BigInt      @id @default(autoincrement())
   label         String      @db.VarChar(100)
-  documents     Documents[]
 }
 
 model Documents {
@@ -90,13 +89,12 @@ model Documents {
   description       String             @db.Text
   receivedFrom      String             @db.VarChar(100)
   typeId            BigInt?
-  purposeId         BigInt?
+  purposeIds        String             @db.VarChar(50) @default("4")
   signatureId       String?            @db.Uuid
   dateCreated       DateTime           @db.Timestamp(3) @default(now())
-  dateDue           DateTime
+  dateDue           DateTime?
   tag               String?            @db.VarChar(20)
   type              DocumentTypes?     @relation(fields: [typeId], references: [id], onDelete: SetNull)
-  purpose           DocumentPurpose?   @relation(fields: [purposeId], references: [id], onDelete: SetNull)
   signatory         Officers?          @relation(fields: [signatureId], references: [uuid], onDelete: SetNull)
   referrals         Referrals[]
   assigned          Assigned[]
@@ -123,10 +121,11 @@ model Assigned {
   officerId         String             @db.Uuid
   documentId        String             @db.VarChar(50)
   assignment        Assignment         @default(MEMBER)
+  assignee          Role               @default(CHIEF)
   officer           Officers           @relation(fields: [officerId], references: [uuid], onDelete: Cascade)
   document          Documents          @relation(fields: [documentId], references: [referenceNum], onDelete: Cascade)
 
-  @@id([officerId, documentId])
+  @@id([officerId, documentId, assignee])
 }
 
 model Comments {
@@ -135,7 +134,7 @@ model Comments {
   sender           String             @db.Uuid
   recipient        String             @db.Uuid
   message          String             @db.Text
-  dateCreated       DateTime          @db.Timestamp(3) @default(now())
+  dateCreated      DateTime           @db.Timestamp(3) @default(now())
   document         Documents          @relation(fields: [documentId], references: [referenceNum], onDelete: Cascade)
 }
 

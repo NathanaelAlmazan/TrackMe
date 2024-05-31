@@ -64,14 +64,15 @@ const schema = gql`
     description: String!
     receivedFrom: String!
     type: DocumentTypes
-    purpose: DocumentPurpose
+    purpose: [DocumentPurpose!]!
     tag: Tags
     dateCreated: String!
     status: String!
-    dateDue: String!
+    dateDue: String
     signatory: Officers!
     referredTo: [Referrals!]!
-    assigned(officerId: String!): [Officers!]!
+    directorAssigned: [Officers!]!
+    chiefAssigned(officerId: String!): [Officers!]!
     comments(officerId: String!): [Comments!]!
     recipients(officerId: String!): [Officers!]!
   }
@@ -84,6 +85,7 @@ const schema = gql`
   type Assigned {
     officer: Officers!
     assignment: Assignment!
+    assignee: Role!
   }
 
   type Comments {
@@ -132,10 +134,11 @@ const schema = gql`
       description: String!
       receivedFrom: String!
       typeId: Int!
-      purposeId: Int!
+      purposeIds: String!
       tag: Tags
-      dateDue: String!
+      dateDue: String
       signatureId: String!
+      assignedTo: [String!]!
       referredTo: [ReferralInput!]!
     ): Documents!
 
@@ -145,9 +148,10 @@ const schema = gql`
       description: String
       receivedFrom: String
       typeId: Int
-      purposeId: Int
+      purposeIds: String
       tag: Tags
       dateDue: String
+      assignedTo: [String!]
       signatureId: String!
     ): Documents!
 

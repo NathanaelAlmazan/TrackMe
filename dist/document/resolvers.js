@@ -14,10 +14,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const client_1 = require("@prisma/client");
 const web_push_1 = __importDefault(require("web-push"));
+const graphql_subscriptions_1 = require("graphql-subscriptions");
 const data_client_1 = __importDefault(require("../data-client"));
 const pubsub_1 = __importDefault(require("../pubsub"));
 const documents_1 = require("../routines/documents");
 const graphql_1 = require("graphql");
+const resolvers_1 = require("../users/resolvers");
 const resolvers = {
     DocumentStatus: {
         id: (parent) => {
@@ -73,11 +75,12 @@ const resolvers = {
             });
         }),
         purpose: (parent) => __awaiter(void 0, void 0, void 0, function* () {
-            if (!parent.purposeId)
-                return null;
-            return yield data_client_1.default.documentPurpose.findUnique({
+            const ids = parent.purposeIds.split(",").map((id) => parseInt(id));
+            return yield data_client_1.default.documentPurpose.findMany({
                 where: {
-                    id: parent.purposeId,
+                    id: {
+                        in: ids,
+                    },
                 },
             });
         }),
@@ -94,6 +97,8 @@ const resolvers = {
             return parent.dateCreated.toISOString();
         },
         dateDue: (parent) => {
+            if (!parent.dateDue)
+                return null;
             return parent.dateDue.toISOString();
         },
         status: (parent) => __awaiter(void 0, void 0, void 0, function* () {
@@ -122,13 +127,30 @@ const resolvers = {
             });
             return referrals;
         }),
-        assigned: (parent, args) => __awaiter(void 0, void 0, void 0, function* () {
+        directorAssigned: (parent) => __awaiter(void 0, void 0, void 0, function* () {
+            const assigned = yield data_client_1.default.assigned.findMany({
+                where: {
+                    documentId: parent.referenceNum,
+                    assignee: client_1.Role.DIRECTOR,
+                },
+                select: {
+                    officer: true,
+                },
+            });
+            return assigned.map((obj) => obj.officer);
+        }),
+        chiefAssigned: (parent, args) => __awaiter(void 0, void 0, void 0, function* () {
             const officer = yield data_client_1.default.officers.findUnique({
                 where: {
                     uuid: args.officerId,
                 },
                 select: {
                     officeId: true,
+                    position: {
+                        select: {
+                            role: true,
+                        },
+                    },
                 },
             });
             if (!officer || !officer.officeId)
@@ -136,6 +158,7 @@ const resolvers = {
             const assigned = yield data_client_1.default.assigned.findMany({
                 where: {
                     documentId: parent.referenceNum,
+                    assignee: client_1.Role.CHIEF,
                     officer: {
                         office: {
                             id: officer.officeId,
@@ -167,72 +190,83 @@ const resolvers = {
             });
         }),
         recipients: (parent, args) => __awaiter(void 0, void 0, void 0, function* () {
+            var _a;
+            // if regional director, return all assigned
             const officer = yield data_client_1.default.officers.findUnique({
                 where: {
                     uuid: args.officerId,
                 },
                 select: {
+                    officeId: true,
                     position: {
                         select: {
                             role: true,
                         },
                     },
-                    officeId: true,
                 },
             });
-            if (!officer || !officer.officeId || !officer.position)
+            if (!officer)
                 return [];
-            if (officer.position.role === client_1.Role.SUPERUSER ||
-                officer.position.role === client_1.Role.DIRECTOR)
-                return data_client_1.default.officers.findMany({
+            if (((_a = officer.position) === null || _a === void 0 ? void 0 : _a.role) === client_1.Role.DIRECTOR) {
+                return yield data_client_1.default.officers.findMany({
                     where: {
-                        position: {
-                            role: client_1.Role.CHIEF,
-                        },
-                        office: {
-                            referrals: {
-                                some: {
-                                    documentId: parent.referenceNum,
-                                },
+                        assigned: {
+                            some: {
+                                documentId: parent.referenceNum,
                             },
                         },
-                    },
+                    }
                 });
-            else if (officer.position.role === client_1.Role.CHIEF)
+            }
+            // else find the officer among the assigned
+            const assigned = yield data_client_1.default.assigned.findFirst({
+                where: {
+                    documentId: parent.referenceNum,
+                    officerId: args.officerId,
+                }
+            });
+            if (!assigned)
+                return [];
+            // if director assigned return director contact
+            if (assigned.assignee === client_1.Role.DIRECTOR) {
+                return yield data_client_1.default.officers.findMany({
+                    where: {
+                        position: {
+                            role: client_1.Role.DIRECTOR,
+                        }
+                    }
+                });
+            }
+            // if chief assigned return chief contact
+            else if (assigned.assignee === client_1.Role.CHIEF) {
+                return yield data_client_1.default.officers.findMany({
+                    where: {
+                        officeId: officer.officeId,
+                        position: {
+                            role: client_1.Role.CHIEF,
+                        }
+                    }
+                });
+            }
+            // if automaticall assigned return office contact
+            else if (assigned.assignee === client_1.Role.SUPERUSER) {
                 return yield data_client_1.default.officers.findMany({
                     where: {
                         OR: [
                             {
-                                position: {
-                                    role: client_1.Role.DIRECTOR,
-                                },
+                                officeId: officer.officeId
                             },
                             {
-                                assigned: {
-                                    some: {
-                                        documentId: parent.referenceNum,
-                                    },
-                                },
-                            },
-                        ],
-                    },
+                                position: {
+                                    role: client_1.Role.DIRECTOR
+                                }
+                            }
+                        ]
+                    }
                 });
-            else
-                return yield data_client_1.default.officers.findMany({
-                    where: {
-                        position: {
-                            role: client_1.Role.CHIEF,
-                        },
-                        office: {
-                            id: officer.officeId,
-                            referrals: {
-                                some: {
-                                    documentId: parent.referenceNum,
-                                },
-                            },
-                        },
-                    },
-                });
+            }
+            // if none satisfied return empty
+            return [];
         }),
     },
     Comments: {
@@ -479,18 +513,6 @@ const resolvers = {
             });
         }),
         deleteDocumentPurpose: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            const purposes = yield data_client_1.default.documents.aggregate({
-                where: {
-                    purposeId: args.id,
-                },
-                _count: true,
-            });
-            if (purposes._count > 0)
-                throw new graphql_1.GraphQLError("There are active documents under this purpose.", {
-                    extensions: {
-                        code: "BAD_USER_INPUT",
-                    },
-                });
             return yield data_client_1.default.documentPurpose.delete({
                 where: {
                     id: args.id,
@@ -538,7 +560,7 @@ const resolvers = {
         }),
         // ============================== DOCUMENTS ===================================
         createDocument: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            const { subject, description, receivedFrom, typeId, purposeId, signatureId, tag, dateDue, referredTo, } = args;
+            const { subject, description, receivedFrom, typeId, purposeIds, signatureId, tag, dateDue, referredTo, assignedTo, } = args;
             // get current count
             const today = new Date();
             const document = yield data_client_1.default.documents.findFirst({
@@ -559,35 +581,86 @@ const resolvers = {
                 ? document.referenceNum.split("-")[3]
                 : "00000";
             const referenceNum = `RR6-${today.getFullYear()}-${today.getMonth() + 1}-${String(parseInt(serial) + 1).padStart(5, "0")}`;
-            // trigger created document event
-            pubsub_1.default.publish("OFFICE_ADMIN", {
-                officeEvents: {
-                    eventName: `CREATED_DOCUMENT_${referenceNum}`,
-                    eventDate: new Date().toISOString(),
-                },
-            });
             // trigger assigned document event
-            referredTo.forEach((ref) => pubsub_1.default.publish(`OFFICE_${ref.officeId.toString()}`, {
+            pubsub_1.default.publish("OFFICE_EVENTS", {
                 officeEvents: {
+                    eventId: referredTo.map((ref) => ref.officeId.toString()),
                     eventName: `ASSIGNED_DOCUMENT_${referenceNum}`,
                     eventDate: new Date().toISOString(),
                 },
-            }));
-            // send notification
-            referredTo.forEach((ref) => (0, documents_1.sendNotification)(ref.officeId, `Assigned Document ${referenceNum}`, subject));
+            });
+            const assignedOfficers = assignedTo.filter((officer) => !officer.includes("Add"));
+            // save unknown assigned officers
+            for (const officer of assignedTo.filter((officer) => officer.includes("Add"))) {
+                const temp = yield data_client_1.default.officers.upsert({
+                    where: {
+                        firstName_lastName: {
+                            firstName: officer.split(" ", 3)[1],
+                            lastName: officer.split(" ", 3)[2] || "",
+                        },
+                    },
+                    update: {
+                        officeId: resolvers_1.BIN_OFFICE,
+                    },
+                    create: {
+                        firstName: officer.split(" ", 3)[1],
+                        lastName: officer.split(" ", 3)[2] || "",
+                        officeId: resolvers_1.BIN_OFFICE,
+                    },
+                });
+                assignedOfficers.push(temp.uuid);
+            }
             // get initial assigned
-            const officers = yield data_client_1.default.officers.findMany({
-                where: {
-                    officeId: {
-                        in: referredTo.map((ref) => ref.officeId),
+            let officers = [];
+            if (assignedOfficers.length > 0) {
+                officers = yield data_client_1.default.officers.findMany({
+                    where: {
+                        uuid: {
+                            in: assignedOfficers,
+                        },
                     },
-                    position: {
-                        role: client_1.Role.CHIEF,
+                    select: {
+                        uuid: true,
+                        device: true,
+                        position: {
+                            select: {
+                                role: true,
+                            },
+                        },
                     },
-                },
-                select: {
-                    uuid: true,
-                },
+                });
+            }
+            else {
+                officers = yield data_client_1.default.officers.findMany({
+                    where: {
+                        officeId: {
+                            in: referredTo.map((ref) => ref.officeId),
+                        },
+                        position: {
+                            role: client_1.Role.CHIEF,
+                        },
+                    },
+                    select: {
+                        uuid: true,
+                        device: true,
+                        position: {
+                            select: {
+                                role: true,
+                            },
+                        },
+                    },
+                });
+            }
+            const payload = JSON.stringify({
+                title: `Assigned ${referenceNum}`,
+                body: `You are assigned to accomplish ${referenceNum}`,
+                icon: "https://res.cloudinary.com/ddpqji6uq/image/upload/v1691402859/bir_logo_hdniut.png",
+            });
+            officers.forEach((officer) => {
+                if (officer.device)
+                    web_push_1.default
+                        .sendNotification(JSON.parse(officer.device), payload)
+                        .catch((err) => console.error(err));
             });
             // create new document
             return yield data_client_1.default.documents.create({
@@ -597,10 +670,10 @@ const resolvers = {
                     description: description,
                     receivedFrom: receivedFrom,
                     typeId: typeId,
-                    purposeId: purposeId,
+                    purposeIds: purposeIds,
                     signatureId: signatureId,
                     tag: tag,
-                    dateDue: new Date(dateDue),
+                    dateDue: dateDue ? new Date(dateDue) : null,
                     referrals: {
                         createMany: {
                             data: referredTo,
@@ -608,17 +681,23 @@ const resolvers = {
                     },
                     assigned: {
                         createMany: {
-                            data: officers.map((officer) => ({
-                                officerId: officer.uuid,
-                                assignment: client_1.Assignment.APPROVER,
-                            })),
+                            data: officers.map((officer) => {
+                                var _a;
+                                return ({
+                                    officerId: officer.uuid,
+                                    assignment: ((_a = officer.position) === null || _a === void 0 ? void 0 : _a.role) === client_1.Role.CHIEF
+                                        ? client_1.Assignment.APPROVER
+                                        : client_1.Assignment.MEMBER,
+                                    assignee: assignedOfficers.length > 0 ? client_1.Role.DIRECTOR : client_1.Role.SUPERUSER,
+                                });
+                            }),
                         },
                     },
                 },
             });
         }),
         updateDocument: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            const { referenceNum, subject, description, receivedFrom, typeId, purposeId, signatureId, tag, dateDue, } = args;
+            const { referenceNum, subject, description, receivedFrom, typeId, purposeIds, signatureId, tag, dateDue, } = args;
             const referredTo = yield data_client_1.default.referrals.findMany({
                 where: {
                     documentId: referenceNum,
@@ -627,20 +706,14 @@ const resolvers = {
                     officeId: true,
                 },
             });
-            // trigger updated document event
-            pubsub_1.default.publish("OFFICE_ADMIN", {
+            // trigger reassigned document event
+            pubsub_1.default.publish("OFFICE_EVENTS", {
                 officeEvents: {
+                    eventId: referredTo.map((ref) => ref.officeId.toString()),
                     eventName: `UPDATED_DOCUMENT_${referenceNum}`,
                     eventDate: new Date().toISOString(),
                 },
             });
-            // trigger reassigned document event
-            referredTo.forEach((ref) => pubsub_1.default.publish(`OFFICE_${ref.officeId.toString()}`, {
-                officeEvents: {
-                    eventName: `UPDATED_DOCUMENT_${referenceNum}`,
-                    eventDate: new Date().toISOString(),
-                },
-            }));
             return yield data_client_1.default.documents.update({
                 where: {
                     referenceNum: referenceNum,
@@ -650,15 +723,15 @@ const resolvers = {
                     description: description,
                     receivedFrom: receivedFrom,
                     typeId: typeId,
-                    purposeId: purposeId,
+                    purposeIds: purposeIds,
                     signatureId: signatureId,
                     tag: tag,
-                    dateDue: new Date(dateDue),
+                    dateDue: dateDue ? new Date(dateDue) : null,
                 },
             });
         }),
         documentUpdateStatus: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            var _a, _b;
+            var _b, _c;
             const updated = yield data_client_1.default.referrals.update({
                 where: {
                     officeId_documentId: {
@@ -674,22 +747,17 @@ const resolvers = {
                 },
             });
             // trigger updated document event
-            pubsub_1.default.publish(`DOCUMENT_${args.referenceNum}`, {
+            pubsub_1.default.publish("DOCUMENT_EVENTS", {
                 documentEvents: {
+                    eventId: args.referenceNum,
                     eventName: `UPDATED_DOCUMENT_${args.referenceNum}`,
                     eventDate: new Date().toISOString(),
                 },
             });
             // trigger updated document event
-            pubsub_1.default.publish("OFFICE_ADMIN", {
+            pubsub_1.default.publish("OFFICE_EVENTS", {
                 officeEvents: {
-                    eventName: `UPDATED_DOCUMENT_${args.referenceNum}`,
-                    eventDate: new Date().toISOString(),
-                },
-            });
-            // trigger updated document event
-            pubsub_1.default.publish(`OFFICE_${args.officeId.toString()}`, {
-                officeEvents: {
+                    eventId: [args.officeId.toString()],
                     eventName: `UPDATED_DOCUMENT_${args.referenceNum}`,
                     eventDate: new Date().toISOString(),
                 },
@@ -710,8 +778,8 @@ const resolvers = {
                 },
             });
             const payload = JSON.stringify({
-                title: `${(_a = updated.status) === null || _a === void 0 ? void 0 : _a.label} ${args.referenceNum}`,
-                body: `Document status changed to ${(_b = updated.status) === null || _b === void 0 ? void 0 : _b.label}`,
+                title: `${(_b = updated.status) === null || _b === void 0 ? void 0 : _b.label} ${args.referenceNum}`,
+                body: `Document status changed to ${(_c = updated.status) === null || _c === void 0 ? void 0 : _c.label}`,
                 icon: "https://res.cloudinary.com/ddpqji6uq/image/upload/v1691402859/bir_logo_hdniut.png",
             });
             recipients.forEach((officer) => {
@@ -736,27 +804,22 @@ const resolvers = {
                     },
                 },
             });
-            // trigger created document event
-            pubsub_1.default.publish("OFFICE_ADMIN", {
+            // trigger assigned document event
+            pubsub_1.default.publish("OFFICE_EVENTS", {
                 officeEvents: {
+                    eventId: deleted.referrals.map((ref) => ref.officeId.toString()),
                     eventName: `DELETED_DOCUMENT_${referenceNum}`,
                     eventDate: new Date().toISOString(),
                 },
             });
-            // trigger assigned document event
-            deleted.referrals.forEach((office) => pubsub_1.default.publish(`OFFICE_${office.officeId.toString()}`, {
-                officeEvents: {
-                    eventName: `DELETED_DOCUMENT_${referenceNum}`,
-                    eventDate: new Date().toISOString(),
-                },
-            }));
             return deleted;
         }),
         createComment: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             const { senderId, recipientId, documentId, message } = args;
             // trigger updated document event
-            pubsub_1.default.publish(`DOCUMENT_${documentId}`, {
+            pubsub_1.default.publish("DOCUMENT_EVENTS", {
                 documentEvents: {
+                    eventId: documentId,
                     eventName: `ADDED_COMMENT_${documentId}`,
                     eventDate: new Date().toISOString(),
                 },
@@ -775,6 +838,7 @@ const resolvers = {
             yield data_client_1.default.assigned.deleteMany({
                 where: {
                     documentId: args.documentId,
+                    assignee: client_1.Role.CHIEF,
                 },
             });
             // save new assignments
@@ -783,6 +847,7 @@ const resolvers = {
                     documentId: args.documentId,
                     officerId: officerId,
                     assignment: client_1.Assignment.MEMBER,
+                    assignee: client_1.Role.CHIEF,
                 })),
             });
             // send notifications to assigned officers
@@ -813,16 +878,16 @@ const resolvers = {
     },
     Subscription: {
         officeEvents: {
-            subscribe: (officeId) => {
-                if (!officeId)
-                    return pubsub_1.default.asyncIterator(["OFFICE_ADMIN"]);
-                return pubsub_1.default.asyncIterator([`OFFICE_${officeId.toString()}`]);
-            },
+            subscribe: (0, graphql_subscriptions_1.withFilter)(() => pubsub_1.default.asyncIterator("OFFICE_EVENTS"), (payload, variables) => {
+                if (!variables.officeId)
+                    return true;
+                return payload.officeEvents.eventId.includes(variables.officeId.toString());
+            }),
         },
         documentEvents: {
-            subscribe: (referenceNum) => {
-                return pubsub_1.default.asyncIterator([`DOCUMENT_${referenceNum}`]);
-            },
+            subscribe: (0, graphql_subscriptions_1.withFilter)(() => pubsub_1.default.asyncIterator("DOCUMENT_EVENTS"), (payload, variables) => {
+                return payload.documentEvents.eventId === variables.referenceNum;
+            }),
         },
     },
 };

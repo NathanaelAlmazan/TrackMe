@@ -10,12 +10,15 @@ import {
   Status,
 } from "@prisma/client";
 import webpush from "web-push";
+import { withFilter } from "graphql-subscriptions";
 import dataClient from "../data-client";
 import pubsub from "../pubsub";
-import { getDocumentStatus, sendNotification } from "../routines/documents";
+import { getDocumentStatus } from "../routines/documents";
 import { GraphQLError } from "graphql";
+import { BIN_OFFICE } from "../users/resolvers";
 
 interface DocumentInput extends Documents {
+  assignedTo: string[];
   referredTo: {
     officeId: number;
     statusId: number;
@@ -91,11 +94,13 @@ const resolvers = {
     },
 
     purpose: async (parent: Documents) => {
-      if (!parent.purposeId) return null;
+      const ids = parent.purposeIds.split(",").map((id) => parseInt(id));
 
-      return await dataClient.documentPurpose.findUnique({
+      return await dataClient.documentPurpose.findMany({
         where: {
-          id: parent.purposeId,
+          id: {
+            in: ids,
+          },
         },
       });
     },
@@ -115,6 +120,7 @@ const resolvers = {
     },
 
     dateDue: (parent: Documents) => {
+      if (!parent.dateDue) return null;
       return parent.dateDue.toISOString();
     },
 
@@ -156,13 +162,32 @@ const resolvers = {
       return referrals;
     },
 
-    assigned: async (parent: Documents, args: { officerId: string }) => {
+    directorAssigned: async (parent: Documents) => {
+      const assigned = await dataClient.assigned.findMany({
+        where: {
+          documentId: parent.referenceNum,
+          assignee: Role.DIRECTOR,
+        },
+        select: {
+          officer: true,
+        },
+      });
+
+      return assigned.map((obj) => obj.officer);
+    },
+
+    chiefAssigned: async (parent: Documents, args: { officerId: string }) => {
       const officer = await dataClient.officers.findUnique({
         where: {
           uuid: args.officerId,
         },
         select: {
           officeId: true,
+          position: {
+            select: {
+              role: true,
+            },
+          },
         },
       });
 
@@ -171,6 +196,7 @@ const resolvers = {
       const assigned = await dataClient.assigned.findMany({
         where: {
           documentId: parent.referenceNum,
+          assignee: Role.CHIEF,
           officer: {
             office: {
               id: officer.officeId,
@@ -205,75 +231,85 @@ const resolvers = {
     },
 
     recipients: async (parent: Documents, args: { officerId: string }) => {
+      // if regional director, return all assigned
       const officer = await dataClient.officers.findUnique({
         where: {
           uuid: args.officerId,
         },
         select: {
+          officeId: true,
           position: {
             select: {
               role: true,
             },
           },
-          officeId: true,
         },
       });
 
-      if (!officer || !officer.officeId || !officer.position) return [];
+      if (!officer) return [];
 
-      if (
-        officer.position.role === Role.SUPERUSER ||
-        officer.position.role === Role.DIRECTOR
-      )
-        return dataClient.officers.findMany({
+      if (officer.position?.role === Role.DIRECTOR) {
+        return await dataClient.officers.findMany({
           where: {
-            position: {
-              role: Role.CHIEF,
-            },
-            office: {
-              referrals: {
-                some: {
-                  documentId: parent.referenceNum,
-                },
+            assigned: {
+              some: {
+                documentId: parent.referenceNum,
               },
             },
-          },
-        });
-      else if (officer.position.role === Role.CHIEF)
+          }
+        })
+      }
+
+      // else find the officer among the assigned
+      const assigned = await dataClient.assigned.findFirst({
+        where: {
+          documentId: parent.referenceNum,
+          officerId: args.officerId,
+        }
+      });
+
+      if (!assigned) return [];
+
+      // if director assigned return director contact
+      if (assigned.assignee === Role.DIRECTOR) {
+        return await dataClient.officers.findMany({
+          where: {
+            position: {
+              role: Role.DIRECTOR,
+            }
+          }
+        })
+      }
+      // if chief assigned return chief contact
+      else if (assigned.assignee === Role.CHIEF) {
+        return await dataClient.officers.findMany({
+          where: {
+            officeId: officer.officeId,
+            position: {
+              role: Role.CHIEF,
+            }
+          }
+        })
+      }
+      // if automaticall assigned return office contact
+      else if (assigned.assignee === Role.SUPERUSER) {
         return await dataClient.officers.findMany({
           where: {
             OR: [
               {
-                position: {
-                  role: Role.DIRECTOR,
-                },
+                officeId: officer.officeId
               },
               {
-                assigned: {
-                  some: {
-                    documentId: parent.referenceNum,
-                  },
-                },
-              },
-            ],
-          },
-        });
-      else
-        return await dataClient.officers.findMany({
-          where: {
-            position: {
-              role: Role.CHIEF,
-            },
-            office: {
-              id: officer.officeId,
-              referrals: {
-                some: {
-                  documentId: parent.referenceNum,
-                },
-              },
-            },
-          },
-        });
+                position: {
+                  role: Role.DIRECTOR
+                }
+              }
+            ]
+          }
+        })
+      }
+      // if none satisfied return empty
+      return [];
     },
   },
 
@@ -569,23 +605,6 @@ const resolvers = {
     },
 
     deleteDocumentPurpose: async (_: unknown, args: DocumentPurpose) => {
-      const purposes = await dataClient.documents.aggregate({
-        where: {
-          purposeId: args.id,
-        },
-        _count: true,
-      });
-
-      if (purposes._count > 0)
-        throw new GraphQLError(
-          "There are active documents under this purpose.",
-          {
-            extensions: {
-              code: "BAD_USER_INPUT",
-            },
-          }
-        );
-
       return await dataClient.documentPurpose.delete({
         where: {
           id: args.id,
@@ -649,11 +668,12 @@ const resolvers = {
         description,
         receivedFrom,
         typeId,
-        purposeId,
+        purposeIds,
         signatureId,
         tag,
         dateDue,
         referredTo,
+        assignedTo,
       } = args;
 
       // get current count
@@ -680,46 +700,101 @@ const resolvers = {
         today.getMonth() + 1
       }-${String(parseInt(serial) + 1).padStart(5, "0")}`;
 
-      // trigger created document event
-      pubsub.publish("OFFICE_ADMIN", {
+      // trigger assigned document event
+      pubsub.publish("OFFICE_EVENTS", {
         officeEvents: {
-          eventName: `CREATED_DOCUMENT_${referenceNum}`,
+          eventId: referredTo.map((ref) => ref.officeId.toString()),
+          eventName: `ASSIGNED_DOCUMENT_${referenceNum}`,
           eventDate: new Date().toISOString(),
         },
       });
 
-      // trigger assigned document event
-      referredTo.forEach((ref) =>
-        pubsub.publish(`OFFICE_${ref.officeId.toString()}`, {
-          officeEvents: {
-            eventName: `ASSIGNED_DOCUMENT_${referenceNum}`,
-            eventDate: new Date().toISOString(),
-          },
-        })
+      const assignedOfficers = assignedTo.filter(
+        (officer) => !officer.includes("Add")
       );
 
-      // send notification
-      referredTo.forEach((ref) =>
-        sendNotification(
-          ref.officeId,
-          `Assigned Document ${referenceNum}`,
-          subject
-        )
-      );
+      // save unknown assigned officers
+      for (const officer of assignedTo.filter((officer) =>
+        officer.includes("Add")
+      )) {
+        const temp = await dataClient.officers.upsert({
+          where: {
+            firstName_lastName: {
+              firstName: officer.split(" ", 3)[1],
+              lastName: officer.split(" ", 3)[2] || "",
+            },
+          },
+          update: {
+            officeId: BIN_OFFICE,
+          },
+          create: {
+            firstName: officer.split(" ", 3)[1],
+            lastName: officer.split(" ", 3)[2] || "",
+            officeId: BIN_OFFICE,
+          },
+        });
+
+        assignedOfficers.push(temp.uuid);
+      }
 
       // get initial assigned
-      const officers = await dataClient.officers.findMany({
-        where: {
-          officeId: {
-            in: referredTo.map((ref) => ref.officeId),
+      let officers: {
+        uuid: string;
+        device: string | null;
+        position: {
+          role: Role;
+        } | null;
+      }[] = [];
+      if (assignedOfficers.length > 0) {
+        officers = await dataClient.officers.findMany({
+          where: {
+            uuid: {
+              in: assignedOfficers,
+            },
           },
-          position: {
-            role: Role.CHIEF,
+          select: {
+            uuid: true,
+            device: true,
+            position: {
+              select: {
+                role: true,
+              },
+            },
           },
-        },
-        select: {
-          uuid: true,
-        },
+        });
+      } else {
+        officers = await dataClient.officers.findMany({
+          where: {
+            officeId: {
+              in: referredTo.map((ref) => ref.officeId),
+            },
+            position: {
+              role: Role.CHIEF,
+            },
+          },
+          select: {
+            uuid: true,
+            device: true,
+            position: {
+              select: {
+                role: true,
+              },
+            },
+          },
+        });
+      }
+
+      const payload = JSON.stringify({
+        title: `Assigned ${referenceNum}`,
+        body: `You are assigned to accomplish ${referenceNum}`,
+        icon: "https://res.cloudinary.com/ddpqji6uq/image/upload/v1691402859/bir_logo_hdniut.png",
+      });
+
+      officers.forEach((officer) => {
+        if (officer.device)
+          webpush
+            .sendNotification(JSON.parse(officer.device), payload)
+            .catch((err) => console.error(err));
       });
 
       // create new document
@@ -730,10 +805,10 @@ const resolvers = {
           description: description,
           receivedFrom: receivedFrom,
           typeId: typeId,
-          purposeId: purposeId,
+          purposeIds: purposeIds,
           signatureId: signatureId,
           tag: tag,
-          dateDue: new Date(dateDue),
+          dateDue: dateDue ? new Date(dateDue) : null,
           referrals: {
             createMany: {
               data: referredTo,
@@ -743,7 +818,12 @@ const resolvers = {
             createMany: {
               data: officers.map((officer) => ({
                 officerId: officer.uuid,
-                assignment: Assignment.APPROVER,
+                assignment:
+                  officer.position?.role === Role.CHIEF
+                    ? Assignment.APPROVER
+                    : Assignment.MEMBER,
+                assignee:
+                  assignedOfficers.length > 0 ? Role.DIRECTOR : Role.SUPERUSER,
               })),
             },
           },
@@ -758,7 +838,7 @@ const resolvers = {
         description,
         receivedFrom,
         typeId,
-        purposeId,
+        purposeIds,
         signatureId,
         tag,
         dateDue,
@@ -773,23 +853,14 @@ const resolvers = {
         },
       });
 
-      // trigger updated document event
-      pubsub.publish("OFFICE_ADMIN", {
+      // trigger reassigned document event
+      pubsub.publish("OFFICE_EVENTS", {
         officeEvents: {
+          eventId: referredTo.map((ref) => ref.officeId.toString()),
           eventName: `UPDATED_DOCUMENT_${referenceNum}`,
           eventDate: new Date().toISOString(),
         },
       });
-
-      // trigger reassigned document event
-      referredTo.forEach((ref) =>
-        pubsub.publish(`OFFICE_${ref.officeId.toString()}`, {
-          officeEvents: {
-            eventName: `UPDATED_DOCUMENT_${referenceNum}`,
-            eventDate: new Date().toISOString(),
-          },
-        })
-      );
 
       return await dataClient.documents.update({
         where: {
@@ -800,10 +871,10 @@ const resolvers = {
           description: description,
           receivedFrom: receivedFrom,
           typeId: typeId,
-          purposeId: purposeId,
+          purposeIds: purposeIds,
           signatureId: signatureId,
           tag: tag,
-          dateDue: new Date(dateDue),
+          dateDue: dateDue ? new Date(dateDue) : null,
         },
       });
     },
@@ -828,24 +899,18 @@ const resolvers = {
       });
 
       // trigger updated document event
-      pubsub.publish(`DOCUMENT_${args.referenceNum}`, {
+      pubsub.publish("DOCUMENT_EVENTS", {
         documentEvents: {
+          eventId: args.referenceNum,
           eventName: `UPDATED_DOCUMENT_${args.referenceNum}`,
           eventDate: new Date().toISOString(),
         },
       });
 
       // trigger updated document event
-      pubsub.publish("OFFICE_ADMIN", {
+      pubsub.publish("OFFICE_EVENTS", {
         officeEvents: {
-          eventName: `UPDATED_DOCUMENT_${args.referenceNum}`,
-          eventDate: new Date().toISOString(),
-        },
-      });
-
-      // trigger updated document event
-      pubsub.publish(`OFFICE_${args.officeId.toString()}`, {
-        officeEvents: {
+          eventId: [args.officeId.toString()],
           eventName: `UPDATED_DOCUMENT_${args.referenceNum}`,
           eventDate: new Date().toISOString(),
         },
@@ -899,23 +964,14 @@ const resolvers = {
         },
       });
 
-      // trigger created document event
-      pubsub.publish("OFFICE_ADMIN", {
+      // trigger assigned document event
+      pubsub.publish("OFFICE_EVENTS", {
         officeEvents: {
+          eventId: deleted.referrals.map((ref) => ref.officeId.toString()),
           eventName: `DELETED_DOCUMENT_${referenceNum}`,
           eventDate: new Date().toISOString(),
         },
       });
-
-      // trigger assigned document event
-      deleted.referrals.forEach((office) =>
-        pubsub.publish(`OFFICE_${office.officeId.toString()}`, {
-          officeEvents: {
-            eventName: `DELETED_DOCUMENT_${referenceNum}`,
-            eventDate: new Date().toISOString(),
-          },
-        })
-      );
 
       return deleted;
     },
@@ -924,8 +980,9 @@ const resolvers = {
       const { senderId, recipientId, documentId, message } = args;
 
       // trigger updated document event
-      pubsub.publish(`DOCUMENT_${documentId}`, {
+      pubsub.publish("DOCUMENT_EVENTS", {
         documentEvents: {
+          eventId: documentId,
           eventName: `ADDED_COMMENT_${documentId}`,
           eventDate: new Date().toISOString(),
         },
@@ -949,6 +1006,7 @@ const resolvers = {
       await dataClient.assigned.deleteMany({
         where: {
           documentId: args.documentId,
+          assignee: Role.CHIEF,
         },
       });
 
@@ -958,6 +1016,7 @@ const resolvers = {
           documentId: args.documentId,
           officerId: officerId,
           assignment: Assignment.MEMBER,
+          assignee: Role.CHIEF,
         })),
       });
 
@@ -993,16 +1052,24 @@ const resolvers = {
 
   Subscription: {
     officeEvents: {
-      subscribe: (officeId: number | null) => {
-        if (!officeId) return pubsub.asyncIterator(["OFFICE_ADMIN"]);
-        return pubsub.asyncIterator([`OFFICE_${officeId.toString()}`]);
-      },
+      subscribe: withFilter(
+        () => pubsub.asyncIterator("OFFICE_EVENTS"),
+        (payload, variables) => {
+          if (!variables.officeId) return true;
+          return payload.officeEvents.eventId.includes(
+            variables.officeId.toString()
+          );
+        }
+      ),
     },
 
     documentEvents: {
-      subscribe: (referenceNum: string) => {
-        return pubsub.asyncIterator([`DOCUMENT_${referenceNum}`]);
-      },
+      subscribe: withFilter(
+        () => pubsub.asyncIterator("DOCUMENT_EVENTS"),
+        (payload, variables) => {
+          return payload.documentEvents.eventId === variables.referenceNum;
+        }
+      ),
     },
   },
 };
