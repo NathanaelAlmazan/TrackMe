@@ -600,12 +600,12 @@ const resolvers = {
                         },
                     },
                     update: {
-                        officeId: resolvers_1.BIN_OFFICE,
+                        officeId: referredTo.length === 1 ? referredTo[0].officeId : resolvers_1.BIN_OFFICE,
                     },
                     create: {
                         firstName: officer.split(" ", 3)[1],
                         lastName: officer.split(" ", 3)[2] || "",
-                        officeId: resolvers_1.BIN_OFFICE,
+                        officeId: referredTo.length === 1 ? referredTo[0].officeId : resolvers_1.BIN_OFFICE,
                     },
                 });
                 assignedOfficers.push(temp.uuid);

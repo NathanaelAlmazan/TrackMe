@@ -725,12 +725,12 @@ const resolvers = {
             },
           },
           update: {
-            officeId: BIN_OFFICE,
+            officeId: referredTo.length === 1 ? referredTo[0].officeId : BIN_OFFICE,
           },
           create: {
             firstName: officer.split(" ", 3)[1],
             lastName: officer.split(" ", 3)[2] || "",
-            officeId: BIN_OFFICE,
+            officeId: referredTo.length === 1 ? referredTo[0].officeId : BIN_OFFICE,
           },
         });
 
