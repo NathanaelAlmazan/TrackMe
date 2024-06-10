@@ -584,7 +584,7 @@ const resolvers = {
 
           return args.email;
         } else if (args.phone) {
-          const message = `${code} is your TrackMe reset password code.`;
+          const message = `${code} is your reset password code.`;
           await sendSms(args.phone, message);
 
           return args.phone;
@@ -732,7 +732,7 @@ const resolvers = {
 
             return email;
           } else if (phone) {
-            const message = `${code} is your TrackMe account verification code.`;
+            const message = `${code} is your account verification code.`;
             await sendSms(phone, message);
 
             return phone;
