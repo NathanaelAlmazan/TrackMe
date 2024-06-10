@@ -1,13 +1,13 @@
 {
   "files": {
     "main.css": "https://manage.automos.net/static/css/main.b2127959.css",
-    "main.js": "https://manage.automos.net/static/js/main.1b9a2c36.js",
+    "main.js": "https://manage.automos.net/static/js/main.cef88230.js",
     "static/js/916.6be38123.chunk.js": "https://manage.automos.net/static/js/916.6be38123.chunk.js",
     "static/js/92.0bef8689.chunk.js": "https://manage.automos.net/static/js/92.0bef8689.chunk.js",
     "static/js/152.3be5c567.chunk.js": "https://manage.automos.net/static/js/152.3be5c567.chunk.js",
     "static/js/896.c9c26709.chunk.js": "https://manage.automos.net/static/js/896.c9c26709.chunk.js",
     "static/js/172.d0530952.chunk.js": "https://manage.automos.net/static/js/172.d0530952.chunk.js",
-    "static/js/160.1d6183ab.chunk.js": "https://manage.automos.net/static/js/160.1d6183ab.chunk.js",
+    "static/js/160.3daf1188.chunk.js": "https://manage.automos.net/static/js/160.3daf1188.chunk.js",
     "static/js/828.ed45fccb.chunk.js": "https://manage.automos.net/static/js/828.ed45fccb.chunk.js",
     "static/js/664.c1510bd6.chunk.js": "https://manage.automos.net/static/js/664.c1510bd6.chunk.js",
     "static/js/472.a29a2e18.chunk.js": "https://manage.automos.net/static/js/472.a29a2e18.chunk.js",
@@ -35,13 +35,13 @@
     "service-worker.js": "https://manage.automos.net/service-worker.js",
     "index.html": "https://manage.automos.net/index.html",
     "main.b2127959.css.map": "https://manage.automos.net/static/css/main.b2127959.css.map",
-    "main.1b9a2c36.js.map": "https://manage.automos.net/static/js/main.1b9a2c36.js.map",
+    "main.cef88230.js.map": "https://manage.automos.net/static/js/main.cef88230.js.map",
     "916.6be38123.chunk.js.map": "https://manage.automos.net/static/js/916.6be38123.chunk.js.map",
     "92.0bef8689.chunk.js.map": "https://manage.automos.net/static/js/92.0bef8689.chunk.js.map",
     "152.3be5c567.chunk.js.map": "https://manage.automos.net/static/js/152.3be5c567.chunk.js.map",
     "896.c9c26709.chunk.js.map": "https://manage.automos.net/static/js/896.c9c26709.chunk.js.map",
     "172.d0530952.chunk.js.map": "https://manage.automos.net/static/js/172.d0530952.chunk.js.map",
-    "160.1d6183ab.chunk.js.map": "https://manage.automos.net/static/js/160.1d6183ab.chunk.js.map",
+    "160.3daf1188.chunk.js.map": "https://manage.automos.net/static/js/160.3daf1188.chunk.js.map",
     "828.ed45fccb.chunk.js.map": "https://manage.automos.net/static/js/828.ed45fccb.chunk.js.map",
     "664.c1510bd6.chunk.js.map": "https://manage.automos.net/static/js/664.c1510bd6.chunk.js.map",
     "472.a29a2e18.chunk.js.map": "https://manage.automos.net/static/js/472.a29a2e18.chunk.js.map",
@@ -69,6 +69,6 @@
   },
   "entrypoints": [
     "static/css/main.b2127959.css",
-    "static/js/main.1b9a2c36.js"
+    "static/js/main.cef88230.js"
   ]
 }
