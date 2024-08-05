@@ -29,6 +29,21 @@ const resolvers = {
                 return null;
             return new Date(parent.dateDue).toISOString();
         },
+        scope: (parent) => __awaiter(void 0, void 0, void 0, function* () {
+            const scope = yield data_client_1.default.eventScope.findMany({
+                where: {
+                    eventId: parent.id,
+                },
+                select: {
+                    officeId: true,
+                },
+            });
+            return data_client_1.default.offices.findMany({
+                where: {
+                    id: { in: scope.map((s) => s.officeId) },
+                },
+            });
+        }),
     },
     Reports: {
         id: (parent) => {
@@ -46,14 +61,14 @@ const resolvers = {
             return parent.id.toString();
         },
         report: (parent) => __awaiter(void 0, void 0, void 0, function* () {
-            return yield data_client_1.default.reports.findUnique({
+            return data_client_1.default.reports.findUnique({
                 where: {
                     id: parent.reportId,
                 },
             });
         }),
         office: (parent) => __awaiter(void 0, void 0, void 0, function* () {
-            return yield data_client_1.default.offices.findUnique({
+            return data_client_1.default.offices.findUnique({
                 where: {
                     id: parent.officeId,
                 },
@@ -87,7 +102,7 @@ const resolvers = {
     },
     Query: {
         getReports: () => __awaiter(void 0, void 0, void 0, function* () {
-            return yield data_client_1.default.reports.findMany({
+            return data_client_1.default.reports.findMany({
                 orderBy: {
                     name: "asc",
                 },
@@ -112,7 +127,7 @@ const resolvers = {
         }),
         getSubmittedReports: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             if (args.officeId)
-                return yield data_client_1.default.submittedReports.findMany({
+                return data_client_1.default.submittedReports.findMany({
                     where: {
                         officeId: args.officeId,
                     },
@@ -123,7 +138,7 @@ const resolvers = {
             return data_client_1.default.$queryRaw `SELECT DISTINCT ON ("reportId", "localDue", "nationalDue") * FROM public."SubmittedReports"`;
         }),
         getSubmittedReportById: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            return yield data_client_1.default.submittedReports.findUnique({
+            return data_client_1.default.submittedReports.findUnique({
                 where: {
                     id: args.id,
                 },
@@ -141,7 +156,7 @@ const resolvers = {
                         code: "BAD_USER_INPUT",
                     },
                 });
-            return yield data_client_1.default.submittedReports.findMany({
+            return data_client_1.default.submittedReports.findMany({
                 where: {
                     reportId: report.reportId,
                     localDue: report.localDue,
@@ -215,16 +230,34 @@ const resolvers = {
         getEvents: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
             const today = new Date(args.date).toISOString().split("T")[0];
             // get events
-            const events = yield data_client_1.default.$queryRaw `SELECT *
-                            FROM public."Events"
-                            WHERE (
-                                    EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
-                                    AND "frequency" = 'YEARLY'
-                                ) OR (
-                                    EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
-                                    AND EXTRACT(YEAR FROM date) = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD'))
-                                    AND "frequency" = 'NONE'
-                                ) OR "frequency" = 'MONTHLY'`;
+            let events = [];
+            if (args.officeId) {
+                events = yield data_client_1.default.$queryRaw `SELECT *
+                FROM public."Events" evt
+                INNER JOIN public."EventScope" scp
+                    ON scp."eventId" = evt.id
+                WHERE ((
+                    EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                    AND evt."frequency" = 'YEARLY'
+                ) OR (
+                    EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                    AND EXTRACT(YEAR FROM date) = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                    AND (evt."frequency" = 'NONE' OR evt."frequency" = 'QUARTERLY' OR evt."frequency" = 'SEMESTRAL')
+                ) OR evt."frequency" = 'MONTHLY')
+                    AND scp."officeId" = ${args.officeId}`;
+            }
+            else {
+                events = yield data_client_1.default.$queryRaw `SELECT *
+                    FROM public."Events"
+                    WHERE (
+                            EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                            AND "frequency" = 'YEARLY'
+                        ) OR (
+                            EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                            AND EXTRACT(YEAR FROM date) = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                            AND ("frequency" = 'NONE' OR "frequency" = 'QUARTERLY' OR "frequency" = 'SEMESTRAL')
+                        ) OR "frequency" = 'MONTHLY'`;
+            }
             // get reports
             const reports = yield data_client_1.default.$queryRaw `SELECT *
                             FROM public."Reports"
@@ -234,7 +267,7 @@ const resolvers = {
                                 ) OR (
                                     EXTRACT(MONTH FROM "localDue") = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
                                     AND EXTRACT(YEAR FROM "localDue") = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD'))
-                                    AND "frequency" = 'NONE'
+                                    AND ("frequency" = 'NONE' OR "frequency" = 'QUARTERLY' OR "frequency" = 'SEMESTRAL')
                                 ) OR "frequency" = 'MONTHLY'`;
             const documents = yield data_client_1.default.$queryRaw `SELECT DISTINCT doc."referenceNum", doc.subject, doc."dateDue"
                                 FROM public."Referrals" rfl
@@ -307,7 +340,9 @@ const resolvers = {
                 subject: document.referenceNum,
                 description: document.subject,
                 image: null,
-                date: document.dateDue ? new Date(document.dateDue).toISOString() : "",
+                date: document.dateDue
+                    ? new Date(document.dateDue).toISOString()
+                    : "",
                 dateDue: "",
                 frequency: "NONE",
                 type: "DOCUMENT",
@@ -324,7 +359,7 @@ const resolvers = {
             })));
         }),
         getEventById: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            return yield data_client_1.default.events.findUnique({
+            return data_client_1.default.events.findUnique({
                 where: {
                     id: args.id,
                 },
@@ -334,18 +369,30 @@ const resolvers = {
     Mutation: {
         // ============================== EVENTS ===================================
         createEvent: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            return yield data_client_1.default.events.create({
+            return data_client_1.default.events.create({
                 data: {
                     subject: args.subject,
                     description: args.description,
                     image: args.image,
                     date: args.date,
                     frequency: args.frequency,
+                    scope: {
+                        createMany: {
+                            data: args.scope.map((officeId) => ({
+                                officeId: officeId,
+                            })),
+                        },
+                    },
                 },
             });
         }),
         updateEvent: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            return yield data_client_1.default.events.update({
+            yield data_client_1.default.eventScope.deleteMany({
+                where: {
+                    eventId: args.id,
+                },
+            });
+            return data_client_1.default.events.update({
                 where: {
                     id: args.id,
                 },
@@ -355,11 +402,18 @@ const resolvers = {
                     image: args.image,
                     date: args.date,
                     frequency: args.frequency,
+                    scope: {
+                        createMany: {
+                            data: args.scope.map((officeId) => ({
+                                officeId: officeId,
+                            })),
+                        },
+                    },
                 },
             });
         }),
         deleteEvent: (_, args) => __awaiter(void 0, void 0, void 0, function* () {
-            return yield data_client_1.default.events.delete({
+            return data_client_1.default.events.delete({
                 where: {
                     id: args.id,
                 },

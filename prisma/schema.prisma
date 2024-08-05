@@ -16,6 +16,7 @@ model Offices {
   officers    Officers[]
   referrals   Referrals[]
   reports     SubmittedReports[]
+  events      EventScope[]
 }
 
 enum Role {
@@ -63,6 +64,11 @@ enum Status {
   SUBMITTED
   FINISHED
   NOT_ACTIONABLE
+  FOR_APPROVAL
+  FOR_REVIEW
+  FOR_CORRECTION
+  FOR_REVISION
+  UPDATE_REPORT
 }
 
 model DocumentStatus {
@@ -94,6 +100,7 @@ model Documents {
   dateCreated       DateTime           @db.Timestamp(3) @default(now())
   dateDue           DateTime?
   tag               String?            @db.VarChar(20)
+  files             String?            @db.Text
   type              DocumentTypes?     @relation(fields: [typeId], references: [id], onDelete: SetNull)
   signatory         Officers?          @relation(fields: [signatureId], references: [uuid], onDelete: SetNull)
   referrals         Referrals[]
@@ -141,6 +148,8 @@ model Comments {
 enum Frequency {
   NONE
   MONTHLY
+  QUARTERLY
+  SEMESTRAL
   YEARLY
 }
 
@@ -151,6 +160,17 @@ model Events {
   image         String?     @db.Text
   date          DateTime
   frequency     Frequency
+  scope         EventScope[]
+}
+
+model EventScope {
+  eventId       BigInt
+  officeId      BigInt
+  dateCreated   DateTime    @db.Timestamp(3) @default(now())
+  event         Events      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  office        Offices     @relation(fields: [officeId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, officeId])
 }
 
 enum ReportType {

@@ -506,7 +506,7 @@ const resolvers = {
                     return args.email;
                 }
                 else if (args.phone) {
-                    const message = `${code} is your TrackMe reset password code.`;
+                    const message = `${code} is your reset password code.`;
                     yield (0, smtp_1.sendSms)(args.phone, message);
                     return args.phone;
                 }
@@ -631,7 +631,7 @@ const resolvers = {
                         return email;
                     }
                     else if (phone) {
-                        const message = `${code} is your TrackMe account verification code.`;
+                        const message = `${code} is your account verification code.`;
                         yield (0, smtp_1.sendSms)(phone, message);
                         return phone;
                     }

@@ -5,6 +5,8 @@ const schema = (0, graphql_tag_1.gql) `
   enum Frequency {
     NONE
     MONTHLY
+    QUARTERLY
+    SEMESTRAL
     YEARLY
   }
 
@@ -24,6 +26,7 @@ const schema = (0, graphql_tag_1.gql) `
     dateDue: String
     frequency: Frequency!
     type: EventType
+    scope: [Offices]
   }
 
   enum ReportType {
@@ -115,6 +118,7 @@ const schema = (0, graphql_tag_1.gql) `
       image: String
       date: String!
       frequency: Frequency!
+      scope: [Int]
     ): Events!
     updateEvent(
       id: Int!
@@ -123,6 +127,7 @@ const schema = (0, graphql_tag_1.gql) `
       image: String
       date: String
       frequency: Frequency
+      scope: [Int]
     ): Events!
     deleteEvent(id: Int!): Events!
   }

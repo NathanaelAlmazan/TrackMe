@@ -53,7 +53,7 @@ const resolvers = {
 
   Referrals: {
     office: async (parent: Referrals) => {
-      return await dataClient.offices.findUnique({
+      return dataClient.offices.findUnique({
         where: {
           id: parent.officeId,
         },
@@ -63,7 +63,7 @@ const resolvers = {
     status: async (parent: Referrals) => {
       if (!parent.statusId) return null;
 
-      return await dataClient.documentStatus.findUnique({
+      return dataClient.documentStatus.findUnique({
         where: {
           id: parent.statusId,
         },
@@ -71,7 +71,7 @@ const resolvers = {
     },
 
     assigned: async (parent: Referrals) => {
-      return await dataClient.assigned.findMany({
+      return dataClient.assigned.findMany({
         where: {
           documentId: parent.documentId,
           officer: {
@@ -86,7 +86,7 @@ const resolvers = {
     type: async (parent: Documents) => {
       if (!parent.typeId) return null;
 
-      return await dataClient.documentTypes.findUnique({
+      return dataClient.documentTypes.findUnique({
         where: {
           id: parent.typeId,
         },
@@ -96,7 +96,7 @@ const resolvers = {
     purpose: async (parent: Documents) => {
       const ids = parent.purposeIds.split(",").map((id) => parseInt(id));
 
-      return await dataClient.documentPurpose.findMany({
+      return dataClient.documentPurpose.findMany({
         where: {
           id: {
             in: ids,
@@ -108,7 +108,7 @@ const resolvers = {
     signatory: async (parent: Documents) => {
       if (!parent.signatureId) return null;
 
-      return await dataClient.officers.findUnique({
+      return dataClient.officers.findUnique({
         where: {
           uuid: parent.signatureId,
         },
@@ -152,14 +152,16 @@ const resolvers = {
         );
     },
 
+    files: (parent: Documents): string[] => {
+      return parent.files?.split(";") || [];
+    },
+
     referredTo: async (parent: Documents) => {
-      const referrals = await dataClient.referrals.findMany({
+      return dataClient.referrals.findMany({
         where: {
           documentId: parent.referenceNum,
         },
       });
-
-      return referrals;
     },
 
     directorAssigned: async (parent: Documents) => {
@@ -212,7 +214,7 @@ const resolvers = {
     },
 
     comments: async (parent: Documents, args: { officerId: string }) => {
-      return await dataClient.comments.findMany({
+      return dataClient.comments.findMany({
         where: {
           documentId: parent.referenceNum,
           OR: [
@@ -249,15 +251,15 @@ const resolvers = {
       if (!officer) return [];
 
       if (officer.position?.role === Role.DIRECTOR) {
-        return await dataClient.officers.findMany({
+        return dataClient.officers.findMany({
           where: {
             assigned: {
               some: {
                 documentId: parent.referenceNum,
               },
             },
-          }
-        })
+          },
+        });
       }
 
       // else find the officer among the assigned
@@ -265,48 +267,48 @@ const resolvers = {
         where: {
           documentId: parent.referenceNum,
           officerId: args.officerId,
-        }
+        },
       });
 
       if (!assigned) return [];
 
       // if director assigned return director contact
       if (assigned.assignee === Role.DIRECTOR) {
-        return await dataClient.officers.findMany({
+        return dataClient.officers.findMany({
           where: {
             position: {
               role: Role.DIRECTOR,
-            }
-          }
-        })
+            },
+          },
+        });
       }
       // if chief assigned return chief contact
       else if (assigned.assignee === Role.CHIEF) {
-        return await dataClient.officers.findMany({
+        return dataClient.officers.findMany({
           where: {
             officeId: officer.officeId,
             position: {
               role: Role.CHIEF,
-            }
-          }
-        })
+            },
+          },
+        });
       }
       // if automaticall assigned return office contact
       else if (assigned.assignee === Role.SUPERUSER) {
-        return await dataClient.officers.findMany({
+        return dataClient.officers.findMany({
           where: {
             OR: [
               {
-                officeId: officer.officeId
+                officeId: officer.officeId,
               },
               {
                 position: {
-                  role: Role.DIRECTOR
-                }
-              }
-            ]
-          }
-        })
+                  role: Role.DIRECTOR,
+                },
+              },
+            ],
+          },
+        });
       }
       // if none satisfied return empty
       return [];
@@ -319,7 +321,7 @@ const resolvers = {
     },
 
     sender: async (parent: Comments) => {
-      return await dataClient.officers.findUnique({
+      return dataClient.officers.findUnique({
         where: {
           uuid: parent.sender,
         },
@@ -327,7 +329,7 @@ const resolvers = {
     },
 
     recipient: async (parent: Comments) => {
-      return await dataClient.officers.findUnique({
+      return dataClient.officers.findUnique({
         where: {
           uuid: parent.recipient,
         },
@@ -341,7 +343,7 @@ const resolvers = {
 
   Query: {
     getDocumentTypes: async () => {
-      return await dataClient.documentTypes.findMany({
+      return dataClient.documentTypes.findMany({
         orderBy: {
           label: "asc",
         },
@@ -349,7 +351,7 @@ const resolvers = {
     },
 
     getDocumentPurposes: async () => {
-      return await dataClient.documentPurpose.findMany({
+      return dataClient.documentPurpose.findMany({
         orderBy: {
           label: "asc",
         },
@@ -357,7 +359,7 @@ const resolvers = {
     },
 
     getDocumentStatus: async () => {
-      return await dataClient.documentStatus.findMany({
+      return dataClient.documentStatus.findMany({
         orderBy: {
           label: "asc",
         },
@@ -389,7 +391,7 @@ const resolvers = {
         officer.position.role === Role.SUPERUSER ||
         officer.position.role === Role.DIRECTOR
       )
-        return await dataClient.documents.findMany({
+        return dataClient.documents.findMany({
           orderBy: {
             dateCreated: "asc",
           },
@@ -423,7 +425,7 @@ const resolvers = {
     },
 
     getDocumentById: async (_: unknown, args: Documents) => {
-      return await dataClient.documents.findUnique({
+      return dataClient.documents.findUnique({
         where: {
           referenceNum: args.referenceNum,
         },
@@ -457,6 +459,79 @@ const resolvers = {
       ).padStart(5, "0")}`;
     },
 
+    getIsoSummary: async () => {
+        const summary: { officeId: BigInt; category: string; count: number }[] =
+        await dataClient.$queryRaw`
+                SELECT rfl."officeId", status.category, COUNT(*)
+                FROM public."Referrals" rfl
+                INNER JOIN public."Documents" doc
+                ON doc."referenceNum" = rfl."documentId"
+                INNER JOIN public."DocumentStatus" status
+                ON status.id = rfl."statusId"
+                WHERE doc."typeId" = 23
+                GROUP BY rfl."officeId", status.category;`;
+
+      const offices = await dataClient.offices.findMany();
+
+      return offices.map((office) => ({
+        office: office.name,
+        referred: summary
+          .filter(
+            (stat) =>
+              stat.officeId === office.id && stat.category === "REFERRED"
+          )
+          .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
+        closed: summary
+          .filter(
+            (stat) =>
+              stat.officeId === office.id && stat.category === "FINISHED"
+          )
+          .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
+        submitted: summary
+          .filter(
+            (stat) =>
+              stat.officeId === office.id && stat.category === "SUBMITTED"
+          )
+          .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
+        forApproval: summary
+          .filter(
+            (stat) =>
+              stat.officeId === office.id && stat.category === "FOR_APPROVAL"
+          )
+          .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
+        forReview: summary
+          .filter(
+            (stat) =>
+              stat.officeId === office.id && stat.category === "FOR_REVIEW"
+          )
+          .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
+        forCorrection: summary
+          .filter(
+            (stat) =>
+              stat.officeId === office.id && stat.category === "FOR_CORRECTION"
+          )
+          .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
+        forRevision: summary
+          .filter(
+            (stat) =>
+              stat.officeId === office.id && stat.category === "FOR_REVISION"
+          )
+          .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
+        updateReport: summary
+          .filter(
+            (stat) =>
+              stat.officeId === office.id && stat.category === "UPDATE_REPORT"
+          )
+          .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
+        noaction: summary
+          .filter(
+            (stat) =>
+              stat.officeId === office.id && stat.category === "NOT_ACTIONABLE"
+          )
+          .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
+      }));
+    },
+
     getDocumentSummary: async () => {
       const summary: { officeId: BigInt; category: string; count: number }[] =
         await dataClient.$queryRaw`
@@ -471,7 +546,10 @@ const resolvers = {
       return offices.map((office) => ({
         office: office.name,
         referred: summary
-          .filter((stat) => stat.officeId === office.id)
+          .filter(
+            (stat) =>
+              stat.officeId === office.id && stat.category === "REFERRED"
+          )
           .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
         closed: summary
           .filter(
@@ -479,12 +557,40 @@ const resolvers = {
               stat.officeId === office.id && stat.category === "FINISHED"
           )
           .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
-        ongoing: summary
+        submitted: summary
           .filter(
             (stat) =>
-              stat.officeId === office.id &&
-              stat.category !== "NOT_ACTIONABLE" &&
-              stat.category !== "FINISHED"
+              stat.officeId === office.id && stat.category === "SUBMITTED"
+          )
+          .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
+        forApproval: summary
+          .filter(
+            (stat) =>
+              stat.officeId === office.id && stat.category === "FOR_APPROVAL"
+          )
+          .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
+        forReview: summary
+          .filter(
+            (stat) =>
+              stat.officeId === office.id && stat.category === "FOR_REVIEW"
+          )
+          .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
+        forCorrection: summary
+          .filter(
+            (stat) =>
+              stat.officeId === office.id && stat.category === "FOR_CORRECTION"
+          )
+          .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
+        forRevision: summary
+          .filter(
+            (stat) =>
+              stat.officeId === office.id && stat.category === "FOR_REVISION"
+          )
+          .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
+        updateReport: summary
+          .filter(
+            (stat) =>
+              stat.officeId === office.id && stat.category === "UPDATE_REPORT"
           )
           .reduce((acc, stat) => acc + parseInt(stat.count.toString()), 0),
         noaction: summary
@@ -500,7 +606,7 @@ const resolvers = {
       let statistics: { documentId: string; category: string; count: BigInt }[];
 
       if (args.officeId) {
-        // statistics for each offices
+        // statistics for each office
         statistics = await dataClient.$queryRaw`
                     SELECT rfl."documentId", status.category, COUNT(*) 
                     FROM public."Referrals" rfl
@@ -543,7 +649,7 @@ const resolvers = {
     // ============================== DOCUMENT TYPES ===================================
 
     createDocumentType: async (_: unknown, args: DocumentTypes) => {
-      return await dataClient.documentTypes.create({
+      return dataClient.documentTypes.create({
         data: {
           label: args.label,
         },
@@ -551,7 +657,7 @@ const resolvers = {
     },
 
     updateDocumentType: async (_: unknown, args: DocumentTypes) => {
-      return await dataClient.documentTypes.update({
+      return dataClient.documentTypes.update({
         where: {
           id: args.id,
         },
@@ -576,7 +682,7 @@ const resolvers = {
           },
         });
 
-      return await dataClient.documentTypes.delete({
+      return dataClient.documentTypes.delete({
         where: {
           id: args.id,
         },
@@ -586,7 +692,7 @@ const resolvers = {
     // ============================== DOCUMENT PURPOSES ===================================
 
     createDocumentPurpose: async (_: unknown, args: DocumentPurpose) => {
-      return await dataClient.documentPurpose.create({
+      return dataClient.documentPurpose.create({
         data: {
           label: args.label,
         },
@@ -594,7 +700,7 @@ const resolvers = {
     },
 
     updateDocumentPurpose: async (_: unknown, args: DocumentPurpose) => {
-      return await dataClient.documentPurpose.update({
+      return dataClient.documentPurpose.update({
         where: {
           id: args.id,
         },
@@ -605,7 +711,7 @@ const resolvers = {
     },
 
     deleteDocumentPurpose: async (_: unknown, args: DocumentPurpose) => {
-      return await dataClient.documentPurpose.delete({
+      return dataClient.documentPurpose.delete({
         where: {
           id: args.id,
         },
@@ -615,7 +721,7 @@ const resolvers = {
     // ============================== DOCUMENT STATUS ===================================
 
     createDocumentStatus: async (_: unknown, args: DocumentStatus) => {
-      return await dataClient.documentStatus.create({
+      return dataClient.documentStatus.create({
         data: {
           label: args.label,
           category: args.category,
@@ -624,7 +730,7 @@ const resolvers = {
     },
 
     updateDocumentStatus: async (_: unknown, args: DocumentStatus) => {
-      return await dataClient.documentStatus.update({
+      return dataClient.documentStatus.update({
         where: {
           id: args.id,
         },
@@ -653,7 +759,7 @@ const resolvers = {
           }
         );
 
-      return await dataClient.documentStatus.delete({
+      return dataClient.documentStatus.delete({
         where: {
           id: args.id,
         },
@@ -666,6 +772,7 @@ const resolvers = {
       const {
         subject,
         description,
+        files,
         receivedFrom,
         typeId,
         purposeIds,
@@ -725,12 +832,14 @@ const resolvers = {
             },
           },
           update: {
-            officeId: referredTo.length === 1 ? referredTo[0].officeId : BIN_OFFICE,
+            officeId:
+              referredTo.length === 1 ? referredTo[0].officeId : BIN_OFFICE,
           },
           create: {
             firstName: officer.split(" ", 3)[1],
             lastName: officer.split(" ", 3)[2] || "",
-            officeId: referredTo.length === 1 ? referredTo[0].officeId : BIN_OFFICE,
+            officeId:
+              referredTo.length === 1 ? referredTo[0].officeId : BIN_OFFICE,
           },
         });
 
@@ -744,7 +853,7 @@ const resolvers = {
         position: {
           role: Role;
         } | null;
-      }[] = [];
+      }[];
       if (assignedOfficers.length > 0) {
         officers = await dataClient.officers.findMany({
           where: {
@@ -798,11 +907,12 @@ const resolvers = {
       });
 
       // create new document
-      return await dataClient.documents.create({
+      return dataClient.documents.create({
         data: {
           referenceNum: referenceNum,
           subject: subject,
           description: description,
+          files: files,
           receivedFrom: receivedFrom,
           typeId: typeId,
           purposeIds: purposeIds,
@@ -842,6 +952,7 @@ const resolvers = {
         signatureId,
         tag,
         dateDue,
+        files,
       } = args;
 
       const referredTo = await dataClient.referrals.findMany({
@@ -862,13 +973,14 @@ const resolvers = {
         },
       });
 
-      return await dataClient.documents.update({
+      return dataClient.documents.update({
         where: {
           referenceNum: referenceNum,
         },
         data: {
           subject: subject,
           description: description,
+          files: files,
           receivedFrom: receivedFrom,
           typeId: typeId,
           purposeIds: purposeIds,
@@ -988,7 +1100,7 @@ const resolvers = {
         },
       });
 
-      return await dataClient.comments.create({
+      return dataClient.comments.create({
         data: {
           documentId: documentId,
           sender: senderId,
@@ -1042,7 +1154,7 @@ const resolvers = {
             .catch((err) => console.error(err));
       });
 
-      return await dataClient.documents.findUnique({
+      return dataClient.documents.findUnique({
         where: {
           referenceNum: args.documentId,
         },

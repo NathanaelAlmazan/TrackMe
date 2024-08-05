@@ -45,6 +45,13 @@ function autoGenerateReports() {
             select: {
                 id: true,
             },
+            where: {
+                id: {
+                    not: {
+                        in: [18, 19, 20]
+                    }
+                }
+            }
         });
         for (let i = 0; i < reports.length; i++) {
             const report = reports[i];

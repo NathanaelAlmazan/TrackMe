@@ -12,6 +12,7 @@ import pubsub from "../pubsub";
 type CalendarReports = Reports & SubmittedReports;
 
 interface CalendarEvents extends Events {
+  scope: number[];
   dateDue?: string;
   type?: "EVENT" | "REPORT" | "DOCUMENT";
 }
@@ -29,6 +30,23 @@ const resolvers = {
     dateDue: (parent: CalendarEvents) => {
       if (!parent.dateDue) return null;
       return new Date(parent.dateDue).toISOString();
+    },
+
+    scope: async (parent: CalendarEvents) => {
+      const scope = await dataClient.eventScope.findMany({
+        where: {
+          eventId: parent.id,
+        },
+        select: {
+          officeId: true,
+        },
+      });
+
+      return dataClient.offices.findMany({
+        where: {
+          id: { in: scope.map((s) => s.officeId) },
+        },
+      });
     },
   },
 
@@ -52,7 +70,7 @@ const resolvers = {
     },
 
     report: async (parent: SubmittedReports) => {
-      return await dataClient.reports.findUnique({
+      return dataClient.reports.findUnique({
         where: {
           id: parent.reportId,
         },
@@ -60,7 +78,7 @@ const resolvers = {
     },
 
     office: async (parent: SubmittedReports) => {
-      return await dataClient.offices.findUnique({
+      return dataClient.offices.findUnique({
         where: {
           id: parent.officeId,
         },
@@ -100,7 +118,7 @@ const resolvers = {
 
   Query: {
     getReports: async () => {
-      return await dataClient.reports.findMany({
+      return dataClient.reports.findMany({
         orderBy: {
           name: "asc",
         },
@@ -133,7 +151,7 @@ const resolvers = {
 
     getSubmittedReports: async (_: unknown, args: { officeId?: number }) => {
       if (args.officeId)
-        return await dataClient.submittedReports.findMany({
+        return dataClient.submittedReports.findMany({
           where: {
             officeId: args.officeId,
           },
@@ -146,7 +164,7 @@ const resolvers = {
     },
 
     getSubmittedReportById: async (_: unknown, args: Reports) => {
-      return await dataClient.submittedReports.findUnique({
+      return dataClient.submittedReports.findUnique({
         where: {
           id: args.id,
         },
@@ -167,7 +185,7 @@ const resolvers = {
           },
         });
 
-      return await dataClient.submittedReports.findMany({
+      return dataClient.submittedReports.findMany({
         where: {
           reportId: report.reportId,
           localDue: report.localDue,
@@ -271,16 +289,33 @@ const resolvers = {
       const today = new Date(args.date).toISOString().split("T")[0];
 
       // get events
-      const events: Events[] = await dataClient.$queryRaw`SELECT *
-                            FROM public."Events"
-                            WHERE (
-                                    EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
-                                    AND "frequency" = 'YEARLY'
-                                ) OR (
-                                    EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
-                                    AND EXTRACT(YEAR FROM date) = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD'))
-                                    AND "frequency" = 'NONE'
-                                ) OR "frequency" = 'MONTHLY'`;
+      let events: Events[] = [];
+      if (args.officeId) {
+        events = await dataClient.$queryRaw`SELECT *
+                FROM public."Events" evt
+                INNER JOIN public."EventScope" scp
+                    ON scp."eventId" = evt.id
+                WHERE ((
+                    EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                    AND evt."frequency" = 'YEARLY'
+                ) OR (
+                    EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                    AND EXTRACT(YEAR FROM date) = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                    AND (evt."frequency" = 'NONE' OR evt."frequency" = 'QUARTERLY' OR evt."frequency" = 'SEMESTRAL')
+                ) OR evt."frequency" = 'MONTHLY')
+                    AND scp."officeId" = ${args.officeId}`;
+      } else {
+        events = await dataClient.$queryRaw`SELECT *
+                    FROM public."Events"
+                    WHERE (
+                            EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                            AND "frequency" = 'YEARLY'
+                        ) OR (
+                            EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                            AND EXTRACT(YEAR FROM date) = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD'))
+                            AND ("frequency" = 'NONE' OR "frequency" = 'QUARTERLY' OR "frequency" = 'SEMESTRAL')
+                        ) OR "frequency" = 'MONTHLY'`;
+      }
 
       // get reports
       const reports: Reports[] = await dataClient.$queryRaw`SELECT *
@@ -291,7 +326,7 @@ const resolvers = {
                                 ) OR (
                                     EXTRACT(MONTH FROM "localDue") = EXTRACT(MONTH FROM TO_DATE(${today}, 'YYYY-MM-DD'))
                                     AND EXTRACT(YEAR FROM "localDue") = EXTRACT(YEAR FROM TO_DATE(${today}, 'YYYY-MM-DD'))
-                                    AND "frequency" = 'NONE'
+                                    AND ("frequency" = 'NONE' OR "frequency" = 'QUARTERLY' OR "frequency" = 'SEMESTRAL')
                                 ) OR "frequency" = 'MONTHLY'`;
 
       const documents: Documents[] =
@@ -378,7 +413,9 @@ const resolvers = {
               subject: document.referenceNum,
               description: document.subject,
               image: null,
-              date: document.dateDue ? new Date(document.dateDue).toISOString() : "",
+              date: document.dateDue
+                ? new Date(document.dateDue).toISOString()
+                : "",
               dateDue: "",
               frequency: "NONE",
               type: "DOCUMENT",
@@ -399,7 +436,7 @@ const resolvers = {
     },
 
     getEventById: async (_: unknown, args: Events) => {
-      return await dataClient.events.findUnique({
+      return dataClient.events.findUnique({
         where: {
           id: args.id,
         },
@@ -409,20 +446,33 @@ const resolvers = {
 
   Mutation: {
     // ============================== EVENTS ===================================
-    createEvent: async (_: unknown, args: Events) => {
-      return await dataClient.events.create({
+    createEvent: async (_: unknown, args: CalendarEvents) => {
+      return dataClient.events.create({
         data: {
           subject: args.subject,
           description: args.description,
           image: args.image,
           date: args.date,
           frequency: args.frequency,
+          scope: {
+            createMany: {
+              data: args.scope.map((officeId) => ({
+                officeId: officeId,
+              })),
+            },
+          },
         },
       });
     },
 
-    updateEvent: async (_: unknown, args: Events) => {
-      return await dataClient.events.update({
+    updateEvent: async (_: unknown, args: CalendarEvents) => {
+      await dataClient.eventScope.deleteMany({
+        where: {
+          eventId: args.id,
+        },
+      });
+
+      return dataClient.events.update({
         where: {
           id: args.id,
         },
@@ -432,12 +482,19 @@ const resolvers = {
           image: args.image,
           date: args.date,
           frequency: args.frequency,
+          scope: {
+            createMany: {
+              data: args.scope.map((officeId) => ({
+                officeId: officeId,
+              })),
+            },
+          },
         },
       });
     },
 
     deleteEvent: async (_: unknown, args: Events) => {
-      return await dataClient.events.delete({
+      return dataClient.events.delete({
         where: {
           id: args.id,
         },

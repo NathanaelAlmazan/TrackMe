@@ -60,14 +60,35 @@ export async function generateReport() {
 
   const statistics = offices.map((office) => ({
     office: office.name,
-    referred: office.referrals.length,
+    referred: office.referrals.filter(
+      (ref) => ref.status?.category === Status.REFERRED
+    ).length,
     closed: office.referrals.filter(
       (ref) => ref.status?.category === Status.FINISHED
     ).length,
-    ongoing: office.referrals.filter(
+    submitted: office.referrals.filter(
       (ref) =>
-        ref.status?.category !== Status.FINISHED &&
-        ref.status?.category !== Status.NOT_ACTIONABLE
+        ref.status?.category === Status.SUBMITTED
+    ).length,
+    forApproval: office.referrals.filter(
+      (ref) =>
+        ref.status?.category === Status.FOR_APPROVAL
+    ).length,
+    forReview: office.referrals.filter(
+      (ref) =>
+        ref.status?.category === Status.FOR_REVIEW
+    ).length,
+    forCorrection: office.referrals.filter(
+      (ref) =>
+        ref.status?.category === Status.FOR_CORRECTION
+    ).length,
+    forRevision: office.referrals.filter(
+      (ref) =>
+        ref.status?.category === Status.FOR_REVISION
+    ).length,
+    updateReport: office.referrals.filter(
+      (ref) =>
+        ref.status?.category === Status.UPDATE_REPORT
     ).length,
     noaction: office.referrals.filter(
       (ref) => ref.status?.category === Status.NOT_ACTIONABLE
@@ -81,7 +102,12 @@ export async function generateReport() {
     { key: "office", header: "Office" },
     { key: "referred", header: "Referred" },
     { key: "closed", header: "Closed" },
-    { key: "ongoing", header: "Ongoing" },
+    { key: "submitted", header: "Submitted" },
+    { key: "forApproval", header: "For Approval" },
+    { key: "forReview", header: "For Review" },
+    { key: "forCorrection", header: "For Correction" },
+    { key: "updateReport", header: "Update Report" },
+    { key: "forRevision", header: "For Revision" },
     { key: "noaction", header: "Not Actionable" },
   ];
 
@@ -91,7 +117,12 @@ export async function generateReport() {
     office: "Total",
     referred: statistics.reduce((acc, curr) => acc + curr.referred, 0),
     closed: statistics.reduce((acc, curr) => acc + curr.closed, 0),
-    ongoing: statistics.reduce((acc, curr) => acc + curr.ongoing, 0),
+    submitted: statistics.reduce((acc, curr) => acc + curr.submitted, 0),
+    forApproval: statistics.reduce((acc, curr) => acc + curr.forApproval, 0),
+    forReview: statistics.reduce((acc, curr) => acc + curr.forReview, 0),
+    forCorrection: statistics.reduce((acc, curr) => acc + curr.forCorrection, 0),
+    updateReport: statistics.reduce((acc, curr) => acc + curr.updateReport, 0),
+    forRevision: statistics.reduce((acc, curr) => acc + curr.forRevision, 0),
     noaction: statistics.reduce((acc, curr) => acc + curr.noaction, 0),
   });
 
@@ -127,6 +158,7 @@ export async function generateReport() {
     select: {
       referenceNum: true,
       subject: true,
+      description: true,
       dateCreated: true,
       receivedFrom: true,
       tag: true,
@@ -161,6 +193,7 @@ export async function generateReport() {
   const statuses = documents.map((doc) => ({
     referenceNum: doc.referenceNum,
     subject: doc.subject,
+    remarks: doc.description,
     dateCreated: doc.dateCreated,
     receivedFrom: doc.receivedFrom,
     referredTo:
@@ -188,7 +221,8 @@ export async function generateReport() {
     { key: "receivedFrom", header: "Received From" },
     { key: "referredTo", header: "Referred To" },
     { key: "status", header: "Status" },
-    { key: "tag", header: "Remarks" },
+    { key: "tag", header: "Document Tag" },
+    { key: "remarks", header: "Remarks" }
   ];
 
   documentSheet.addRows(statuses);

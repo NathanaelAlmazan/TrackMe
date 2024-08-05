@@ -69,7 +69,7 @@ const wsServer = new ws_1.WebSocketServer({
     server: httpServer,
     path: '/graphql',
 });
-// Save the returned server's info so we can shutdown this server later
+// Save the returned server's info, so we can shut down this server later
 const serverCleanup = (0, ws_2.useServer)({ schema }, wsServer);
 // Set up ApolloServer.
 const server = new server_1.ApolloServer({
@@ -103,7 +103,7 @@ const server = new server_1.ApolloServer({
         else if (((_b = formattedError.extensions) === null || _b === void 0 ? void 0 : _b.code) ===
             errors_1.ApolloServerErrorCode.INTERNAL_SERVER_ERROR) {
             console.log(formattedError.message);
-            return Object.assign(Object.assign({}, formattedError), { message: "Internal Error Occured. Please contact technical support." });
+            return Object.assign(Object.assign({}, formattedError), { message: "Internal Error Occurred. Please contact technical support." });
         }
         // Otherwise return the formatted error. This error can also
         // be manipulated in other ways, as long as it's returned.
@@ -135,12 +135,14 @@ const upload = (0, multer_1.default)({ storage: storage });
 app.post("/upload", upload.array("files"), (req, res) => {
     if (req.files) {
         const files = req.files;
-        return res.status(200).json({ files: files.map(file => ({
+        return res.status(200).json({
+            files: files.map(file => ({
                 fileName: file.originalname,
                 filePath: `/${file.filename}`,
                 fileUrl: `${process.env.BASE_MEDIA_URL}/${file.filename}`,
                 fileType: file.mimetype
-            })) });
+            }))
+        });
     }
     return res.status(400).json({ message: "Failed to upload." });
 });

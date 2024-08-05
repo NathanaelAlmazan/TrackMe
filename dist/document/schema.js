@@ -9,6 +9,11 @@ const schema = (0, graphql_tag_1.gql) `
     SUBMITTED
     FINISHED
     NOT_ACTIONABLE
+    FOR_APPROVAL
+    FOR_REVIEW
+    FOR_CORRECTION
+    FOR_REVISION
+    UPDATE_REPORT
   }
 
   enum Tags {
@@ -37,7 +42,12 @@ const schema = (0, graphql_tag_1.gql) `
     office: String!
     referred: Int!
     closed: Int!
-    ongoing: Int!
+    submitted: Int!
+    forApproval: Int!
+    forReview: Int!
+    forCorrection: Int!
+    forRevision: Int!
+    updateReport: Int!
     noaction: Int!
   }
 
@@ -69,6 +79,7 @@ const schema = (0, graphql_tag_1.gql) `
     tag: Tags
     dateCreated: String!
     status: String!
+    files: [String]
     dateDue: String
     signatory: Officers!
     referredTo: [Referrals!]!
@@ -111,6 +122,7 @@ const schema = (0, graphql_tag_1.gql) `
     getTempReferenceNum: String!
     getDocumentStatistics(officeId: Int): DocumentStatistics!
     getDocumentSummary: [DocumentSummary!]!
+    getIsoSummary: [DocumentSummary!]!
   }
 
   extend type Mutation {
@@ -133,6 +145,7 @@ const schema = (0, graphql_tag_1.gql) `
     createDocument(
       subject: String!
       description: String!
+      files: String
       receivedFrom: String!
       typeId: Int!
       purposeIds: String!
@@ -147,6 +160,7 @@ const schema = (0, graphql_tag_1.gql) `
       referenceNum: String!
       subject: String
       description: String
+      files: String
       receivedFrom: String
       typeId: Int
       purposeIds: String
