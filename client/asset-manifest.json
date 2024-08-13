@@ -1,7 +1,7 @@
 {
   "files": {
     "main.css": "https://rr6manila.com/static/css/main.b2127959.css",
-    "main.js": "https://rr6manila.com/static/js/main.2b08f0e4.js",
+    "main.js": "https://rr6manila.com/static/js/main.24dd00a2.js",
     "static/js/916.a8c9a209.chunk.js": "https://rr6manila.com/static/js/916.a8c9a209.chunk.js",
     "static/js/92.0cf7da30.chunk.js": "https://rr6manila.com/static/js/92.0cf7da30.chunk.js",
     "static/js/152.2421f643.chunk.js": "https://rr6manila.com/static/js/152.2421f643.chunk.js",
@@ -21,8 +21,8 @@
     "static/js/16.7212fa2e.chunk.js": "https://rr6manila.com/static/js/16.7212fa2e.chunk.js",
     "static/js/960.3929107e.chunk.js": "https://rr6manila.com/static/js/960.3929107e.chunk.js",
     "static/js/156.7636283a.chunk.js": "https://rr6manila.com/static/js/156.7636283a.chunk.js",
-    "static/js/144.ccf0cfcc.chunk.js": "https://rr6manila.com/static/js/144.ccf0cfcc.chunk.js",
-    "static/js/296.89f45d15.chunk.js": "https://rr6manila.com/static/js/296.89f45d15.chunk.js",
+    "static/js/144.0889b535.chunk.js": "https://rr6manila.com/static/js/144.0889b535.chunk.js",
+    "static/js/296.aab092e3.chunk.js": "https://rr6manila.com/static/js/296.aab092e3.chunk.js",
     "static/js/848.c127ad05.chunk.js": "https://rr6manila.com/static/js/848.c127ad05.chunk.js",
     "static/js/460.3eda3b76.chunk.js": "https://rr6manila.com/static/js/460.3eda3b76.chunk.js",
     "static/js/14.5901094c.chunk.js": "https://rr6manila.com/static/js/14.5901094c.chunk.js",
@@ -35,7 +35,7 @@
     "service-worker.js": "https://rr6manila.com/service-worker.js",
     "index.html": "https://rr6manila.com/index.html",
     "main.b2127959.css.map": "https://rr6manila.com/static/css/main.b2127959.css.map",
-    "main.2b08f0e4.js.map": "https://rr6manila.com/static/js/main.2b08f0e4.js.map",
+    "main.24dd00a2.js.map": "https://rr6manila.com/static/js/main.24dd00a2.js.map",
     "916.a8c9a209.chunk.js.map": "https://rr6manila.com/static/js/916.a8c9a209.chunk.js.map",
     "92.0cf7da30.chunk.js.map": "https://rr6manila.com/static/js/92.0cf7da30.chunk.js.map",
     "152.2421f643.chunk.js.map": "https://rr6manila.com/static/js/152.2421f643.chunk.js.map",
@@ -55,8 +55,8 @@
     "16.7212fa2e.chunk.js.map": "https://rr6manila.com/static/js/16.7212fa2e.chunk.js.map",
     "960.3929107e.chunk.js.map": "https://rr6manila.com/static/js/960.3929107e.chunk.js.map",
     "156.7636283a.chunk.js.map": "https://rr6manila.com/static/js/156.7636283a.chunk.js.map",
-    "144.ccf0cfcc.chunk.js.map": "https://rr6manila.com/static/js/144.ccf0cfcc.chunk.js.map",
-    "296.89f45d15.chunk.js.map": "https://rr6manila.com/static/js/296.89f45d15.chunk.js.map",
+    "144.0889b535.chunk.js.map": "https://rr6manila.com/static/js/144.0889b535.chunk.js.map",
+    "296.aab092e3.chunk.js.map": "https://rr6manila.com/static/js/296.aab092e3.chunk.js.map",
     "848.c127ad05.chunk.js.map": "https://rr6manila.com/static/js/848.c127ad05.chunk.js.map",
     "460.3eda3b76.chunk.js.map": "https://rr6manila.com/static/js/460.3eda3b76.chunk.js.map",
     "14.5901094c.chunk.js.map": "https://rr6manila.com/static/js/14.5901094c.chunk.js.map",
@@ -69,6 +69,6 @@
   },
   "entrypoints": [
     "static/css/main.b2127959.css",
-    "static/js/main.2b08f0e4.js"
+    "static/js/main.24dd00a2.js"
   ]
 }
